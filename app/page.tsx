@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Check, FileText, Loader2, Search, Upload, X } from "lucide-react";
 import { AdvocateNav } from "@/components/advocate-nav";
 import { BrandLockup } from "@/components/brand-lockup";
+import { useAuth } from "@/contexts/auth-context";
 import { SAMPLE_EOB } from "@/lib/sample-data";
 import { runCasePipeline } from "@/lib/client/run-case-pipeline";
 import { saveCaseSession } from "@/lib/client/case-session";
@@ -73,6 +74,7 @@ const intakeDocumentOptions = [
 
 export default function HomePage() {
   const router = useRouter();
+  const { user, getIdToken } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [documentText, setDocumentText] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -132,6 +134,10 @@ export default function HomePage() {
   }
 
   async function generateCase(useSampleMode: boolean) {
+    if (!user) {
+      router.push("/auth?redirect=/");
+      return;
+    }
     setIsGenerating(true);
     setErrorMessage(null);
 
@@ -139,6 +145,7 @@ export default function HomePage() {
       const state = await runCasePipeline({
         documentText: useSampleMode ? SAMPLE_EOB : documentText,
         useSampleMode,
+        getIdToken,
       });
       saveCaseSession(state);
       router.push("/workspace");

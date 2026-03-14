@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   ChangeEvent,
   DragEvent,
@@ -10,7 +11,9 @@ import {
 } from "react";
 import { Check, LayoutGrid, UploadCloud, ArrowDownWideNarrow } from "lucide-react";
 import { AdvocateNav } from "@/components/advocate-nav";
+import { useAuth } from "@/contexts/auth-context";
 import {
+  clearCaseSession,
   createFallbackCaseSession,
   loadCaseSession,
   type CaseSessionState,
@@ -102,6 +105,8 @@ function filterDocuments(documents: VaultDocument[], activeFilter: string) {
 }
 
 export default function EvidencePage() {
+  const router = useRouter();
+  const { user, loading: authLoading, getIdToken } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [caseState, setCaseState] = useState<CaseSessionState | null>(null);
   const [activeFilter, setActiveFilter] = useState("All Documents");
@@ -110,10 +115,15 @@ export default function EvidencePage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      clearCaseSession();
+      router.replace("/");
+      return;
+    }
     const current = loadCaseSession() || createFallbackCaseSession();
     setCaseState(current);
     setSelectedDocId(current.vaultDocuments[0]?.id ?? null);
-  }, []);
+  }, [authLoading, user, router]);
 
   const resolved = caseState || createFallbackCaseSession();
   const documents = resolved.vaultDocuments;
@@ -147,7 +157,7 @@ export default function EvidencePage() {
       ? current
       : next.vaultDocuments[0]?.id ?? null);
     if (message) setNotice(message);
-    void syncCaseSessionRecord(next).then(setCaseState).catch(() => undefined);
+    void syncCaseSessionRecord(next, getIdToken).then(setCaseState).catch(() => undefined);
   }
 
   function triggerFileInput() {
@@ -223,6 +233,7 @@ export default function EvidencePage() {
       const refreshed = await rerunCaseWithEvidence({
         current: localNext,
         evidenceDocuments: localNext.vaultDocuments,
+        getIdToken,
       });
       saveCaseSession(refreshed);
       setCaseState(refreshed);

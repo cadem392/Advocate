@@ -190,7 +190,10 @@ function toPersistedCaseSession(state: CaseSessionState): PersistedCaseSession {
   };
 }
 
-async function syncCaseRecord(state: CaseSessionState): Promise<CaseSessionState> {
+async function syncCaseRecord(
+  state: CaseSessionState,
+  getIdToken?: () => Promise<string | null>
+): Promise<CaseSessionState> {
   // Bug fix: Add error handling for sync failures
   if (!state) {
     throw new Error("Cannot sync null or undefined case state");
@@ -199,10 +202,16 @@ async function syncCaseRecord(state: CaseSessionState): Promise<CaseSessionState
   const path = state.caseRecordId ? `/api/cases/${state.caseRecordId}` : "/api/cases";
   const method = state.caseRecordId ? "PATCH" : "POST";
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getIdToken ? await getIdToken() : null;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(path, {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(payload),
     });
 
@@ -226,15 +235,19 @@ async function syncCaseRecord(state: CaseSessionState): Promise<CaseSessionState
   }
 }
 
-export async function syncCaseSessionRecord(state: CaseSessionState): Promise<CaseSessionState> {
-  return syncCaseRecord(state);
+export async function syncCaseSessionRecord(
+  state: CaseSessionState,
+  getIdToken?: () => Promise<string | null>
+): Promise<CaseSessionState> {
+  return syncCaseRecord(state, getIdToken);
 }
 
 export async function runCasePipeline(params: {
   documentText: string;
   useSampleMode: boolean;
+  getIdToken?: () => Promise<string | null>;
 }): Promise<CaseSessionState> {
-  const { documentText, useSampleMode } = params;
+  const { documentText, useSampleMode, getIdToken } = params;
 
   const structuredFacts = await postJSON<StructuredFacts>("/api/structure", {
     documentText,
@@ -282,18 +295,19 @@ export async function runCasePipeline(params: {
     }
   );
 
-  return syncCaseRecord(state);
+  return syncCaseRecord(state, getIdToken);
 }
 
 export async function rerunCaseWithEvidence(params: {
   current: CaseSessionState;
   evidenceDocuments: VaultDocument[];
+  getIdToken?: () => Promise<string | null>;
 }): Promise<CaseSessionState> {
   // Bug fix: Validate params before processing
   if (!params || !params.current || !params.evidenceDocuments) {
     throw new Error("Invalid parameters for rerunCaseWithEvidence");
   }
-  const { current, evidenceDocuments } = params;
+  const { current, evidenceDocuments, getIdToken } = params;
   const uploadedDocuments = evidenceDocuments.filter((document) => document && document.sourceType === "uploaded_file");
   const payload: CaseReanalysisRequest = {
     documentText: current.documentText,
@@ -331,5 +345,5 @@ export async function rerunCaseWithEvidence(params: {
     ],
   };
 
-  return syncCaseRecord(mergedState);
+  return syncCaseRecord(mergedState, getIdToken);
 }
