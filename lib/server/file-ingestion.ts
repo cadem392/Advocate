@@ -85,6 +85,84 @@ function decodeText(buffer: Buffer): string {
   return utf8;
 }
 
+function looksLikeReadablePdfText(value: string): boolean {
+  const sample = normalizeWhitespace(value).slice(0, 4000);
+  if (sample.length < 50) {
+    return false;
+  }
+
+  const letters = (sample.match(/[A-Za-z]/g) || []).length;
+  const spaces = (sample.match(/\s/g) || []).length;
+  const symbols = (sample.match(/[^A-Za-z0-9\s]/g) || []).length;
+  const tokens = sample.split(/\s+/).filter(Boolean);
+  const humanWordCount = tokens.filter((token) => /^[A-Za-z][A-Za-z'-]{2,}$/.test(token)).length;
+  const noisyTokenCount = tokens.filter((token) => {
+    if (token.length < 8) {
+      return false;
+    }
+
+    const nonLetters = (token.match(/[^A-Za-z]/g) || []).length;
+    return nonLetters / token.length > 0.35;
+  }).length;
+
+  const commonWords = [
+    "claim",
+    "coverage",
+    "member",
+    "appeal",
+    "medical",
+    "denial",
+    "service",
+    "policy",
+    "provider",
+    "patient",
+  ];
+  const commonWordHits = commonWords.filter((word) =>
+    new RegExp(`\\b${word}\\b`, "i").test(sample)
+  ).length;
+
+  return (
+    letters / sample.length >= 0.45 &&
+    spaces / sample.length >= 0.08 &&
+    symbols / sample.length <= 0.22 &&
+    humanWordCount / Math.max(tokens.length, 1) >= 0.35 &&
+    noisyTokenCount / Math.max(tokens.length, 1) <= 0.25 &&
+    (commonWordHits >= 2 || humanWordCount >= 12)
+  );
+}
+
+async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<string> {
+  try {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const loadingTask = pdfjs.getDocument({
+      data: new Uint8Array(buffer),
+      useWorkerFetch: false,
+      isEvalSupported: false,
+      disableFontFace: true,
+      useSystemFonts: true,
+    });
+    const document = await loadingTask.promise;
+    const parts: string[] = [];
+
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ");
+      const normalizedPageText = normalizeWhitespace(pageText);
+      if (normalizedPageText) {
+        parts.push(normalizedPageText);
+      }
+    }
+
+    await document.destroy();
+    return normalizeWhitespace(parts.join("\n"));
+  } catch {
+    return "";
+  }
+}
+
 function extractPdfText(buffer: Buffer): string {
   const raw = buffer.toString("latin1");
 
@@ -158,13 +236,17 @@ export async function ingestFile(file: File): Promise<EvidenceIngestionResult> {
     extractedText = normalizeWhitespace(decodeText(buffer));
     ingestionStatus = "parsed_text";
   } else if (mimeType === "application/pdf" || extension === "pdf") {
-    extractedText = await extractPdfTextWithPython(buffer);
+    // Bug fix: prefer bundled PDF.js extraction so PDF parsing does not depend on local Python packages.
+    extractedText = await extractPdfTextWithPdfJs(buffer);
+    if (!extractedText) {
+      extractedText = await extractPdfTextWithPython(buffer);
+    }
     if (!extractedText) {
       extractedText = extractPdfText(buffer);
     }
     ingestionStatus = extractedText ? "parsed_pdf" : "metadata_only";
-    if (extractedText.length < 50) {
-      // Fix 4: stop on unreadable PDFs instead of passing empty or noisy text through the pipeline.
+    // Bug fix: reject noisy binary-looking fallback output before it reaches the intake panel and strategy pipeline.
+    if (extractedText.length < 50 || !looksLikeReadablePdfText(extractedText)) {
       throw new ValidationError(
         "We couldn't extract text from this PDF. Try copy-pasting the content as text instead.",
         422
