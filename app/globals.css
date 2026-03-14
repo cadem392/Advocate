@@ -1,0 +1,214 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ── */
+:root {
+  --bg:      #FDFCFB;
+  --border:  #E8E4DF;
+  --navy:    #1E3A5F;
+  --green:   #1B5E3F;
+  --gold:    #C4A747;
+  --red:     #B83A3A;
+  --orange:  #D97706;
+  --blue:    #2563EB;
+  --muted:   #6B6B6B;
+  --panel:   #F9F8F6;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', var(--font-sans), sans-serif;
+  background: var(--bg);
+  color: var(--navy);
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-serif {
+  font-family: 'Playfair Display', var(--font-serif), serif;
+}
+
+.border-subtle {
+  border: 1px solid var(--border);
+}
+
+.bg-panel {
+  background-color: #f9f8f6;
+}
+
+.card-shadow {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.case-card {
+  transition: all 0.2s ease;
+}
+
+.case-card:hover {
+  border-color: var(--navy);
+  box-shadow: 0 4px 12px rgba(30, 58, 95, 0.05);
+}
+
+.progress-fill {
+  background: var(--gold);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.graph-container {
+  background-image: radial-gradient(circle, #e8e4df 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.line-connector {
+  stroke: #e8e4df;
+  stroke-width: 1.5;
+  fill: none;
+}
+
+.doc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1.5rem;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.timeline-line {
+  width: 2px;
+  background: var(--border);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 15px;
+}
+
+.status-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.editor-surface {
+  height: calc(100vh - 128px - 80px);
+}
+
+.editable-region {
+  background-color: rgba(196, 167, 71, 0.08);
+  border-bottom: 1px dashed var(--gold);
+  transition: all 0.2s ease;
+}
+
+.editable-region:hover {
+  background-color: rgba(196, 167, 71, 0.15);
+  cursor: pointer;
+}
+
+.status-line {
+  position: relative;
+}
+
+.status-line::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: var(--border);
+  z-index: 0;
+}
+
+/* ── CSS3 Animations ── */
+@keyframes fadeInUp    { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeIn      { from{opacity:0} to{opacity:1} }
+@keyframes scaleIn     { from{opacity:0;transform:scale(.88)} to{opacity:1;transform:scale(1)} }
+@keyframes slideInRight{ from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
+@keyframes shimmer     { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+@keyframes pulseBorder { 0%,100%{box-shadow:0 0 0 0 rgba(184,58,58,0)} 50%{box-shadow:0 0 0 6px rgba(184,58,58,.25)} }
+@keyframes cascadeRed  { 0%{box-shadow:none;border-color:var(--border)} 30%{box-shadow:0 0 22px 6px rgba(184,58,58,.45);border-color:var(--red)} 100%{box-shadow:0 0 10px 2px rgba(184,58,58,.15);border-color:var(--red)} }
+@keyframes typing      { from{opacity:0} to{opacity:1} }
+@keyframes spin        { to{transform:rotate(360deg)} }
+@keyframes nodeEntry   { from{opacity:0;transform:scale(.8) translateY(10px)} to{opacity:1;transform:scale(1) translateY(0)} }
+@keyframes ripple      { 0%{transform:scale(1);opacity:.6} 100%{transform:scale(2.5);opacity:0} }
+@keyframes floatUp     { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+
+.animate-fade-up    { animation: fadeInUp .45s ease both; }
+.animate-fade       { animation: fadeIn .3s ease both; }
+.animate-scale      { animation: scaleIn .35s cubic-bezier(.34,1.56,.64,1) both; }
+.animate-slide-right{ animation: slideInRight .35s ease both; }
+.animate-float      { animation: floatUp 3s ease-in-out infinite; }
+
+.stagger > * { animation: fadeInUp .4s ease both; }
+.stagger > *:nth-child(1){ animation-delay: .05s; }
+.stagger > *:nth-child(2){ animation-delay: .12s; }
+.stagger > *:nth-child(3){ animation-delay: .19s; }
+.stagger > *:nth-child(4){ animation-delay: .26s; }
+.stagger > *:nth-child(5){ animation-delay: .33s; }
+.stagger > *:nth-child(6){ animation-delay: .40s; }
+
+.skeleton {
+  background: linear-gradient(90deg,#f0ede9 25%,#e8e4df 50%,#f0ede9 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 2px;
+}
+
+.tree-node {
+  animation: nodeEntry .4s cubic-bezier(.34,1.56,.64,1) both;
+  transition: transform .2s, box-shadow .2s;
+}
+.tree-node:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(30,58,95,.1); }
+.tree-node.cascade { animation: cascadeRed .8s ease forwards !important; }
+.tree-node.selected { outline: 2px solid var(--gold); outline-offset: 2px; }
+.deadline-pulse { animation: pulseBorder 2s ease-in-out infinite; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--panel); }
+::-webkit-scrollbar-thumb { background: #d1cdca; border-radius: 3px; }
+
+.dot-grid {
+  background-image: radial-gradient(circle, #E8E4DF 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.letter-shadow { box-shadow: 0 8px 30px -8px rgba(0,0,0,.1); }
+.gold-text { color: var(--gold); }
+
+.nav-active {
+  color: var(--navy) !important;
+  border-bottom: 2px solid var(--navy);
+  padding-bottom: 4px;
+}
+
+.step-done  .step-dot { background: var(--green); border-color: var(--green); }
+.step-done  .step-dot::after { content: '✓'; color: #fff; font-size: 9px; font-weight: 700; }
+.step-active .step-dot { background: var(--navy); border-color: var(--navy); animation: pulseBorder 1.5s infinite; }
+.step-dot {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid #d1cdca; background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .3s; flex-shrink: 0;
+}
+
+.stream-cursor::after {
+  content: '▋';
+  animation: typing .7s step-end infinite;
+  color: var(--navy);
+  font-size: .85em;
+}
+
+.btn-ripple { position: relative; overflow: hidden; }
+.btn-ripple::after {
+  content: '';
+  position: absolute; border-radius: 50%;
+  background: rgba(255,255,255,.25);
+  width: 0; height: 0; top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  animation: ripple .5s ease-out;
+}
+.btn-ripple:active::after { width: 300px; height: 300px; }

@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advocate | Institutional Claim Strategy Platform</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+/* ── Design tokens ── */
+:root {
+  --bg:      #FDFCFB;
+  --border:  #E8E4DF;
+  --navy:    #1E3A5F;
+  --green:   #1B5E3F;
+  --gold:    #C4A747;
+  --red:     #B83A3A;
+  --orange:  #D97706;
+  --blue:    #2563EB;
+  --muted:   #6B6B6B;
+  --panel:   #F9F8F6;
+}
+
+* { box-sizing: border-box; }
+body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--navy); -webkit-font-smoothing:antialiased; margin:0; }
+.font-serif { font-family:'Playfair Display',serif; }
+
+/* ── CSS3 Animations ── */
+@keyframes fadeInUp   { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeIn     { from{opacity:0} to{opacity:1} }
+@keyframes scaleIn    { from{opacity:0;transform:scale(.88)} to{opacity:1;transform:scale(1)} }
+@keyframes slideInRight{ from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
+@keyframes shimmer    { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+@keyframes pulseBorder{ 0%,100%{box-shadow:0 0 0 0 rgba(184,58,58,0)} 50%{box-shadow:0 0 0 6px rgba(184,58,58,.25)} }
+@keyframes cascadeRed { 0%{box-shadow:none;border-color:var(--border)} 30%{box-shadow:0 0 22px 6px rgba(184,58,58,.45);border-color:var(--red)} 100%{box-shadow:0 0 10px 2px rgba(184,58,58,.15);border-color:var(--red)} }
+@keyframes typing     { from{opacity:0} to{opacity:1} }
+@keyframes progressBar{ from{width:0} to{width:var(--pw)} }
+@keyframes spin       { to{transform:rotate(360deg)} }
+@keyframes nodeEntry  { from{opacity:0;transform:scale(.8) translateY(10px)} to{opacity:1;transform:scale(1) translateY(0)} }
+@keyframes ripple     { 0%{transform:scale(1);opacity:.6} 100%{transform:scale(2.5);opacity:0} }
+@keyframes floatUp    { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+
+.animate-fade-up   { animation:fadeInUp .45s ease both }
+.animate-fade      { animation:fadeIn .3s ease both }
+.animate-scale     { animation:scaleIn .35s cubic-bezier(.34,1.56,.64,1) both }
+.animate-slide-right{animation:slideInRight .35s ease both }
+.animate-float     { animation:floatUp 3s ease-in-out infinite }
+
+/* staggered children */
+.stagger > * { animation:fadeInUp .4s ease both }
+.stagger > *:nth-child(1){animation-delay:.05s}
+.stagger > *:nth-child(2){animation-delay:.12s}
+.stagger > *:nth-child(3){animation-delay:.19s}
+.stagger > *:nth-child(4){animation-delay:.26s}
+.stagger > *:nth-child(5){animation-delay:.33s}
+.stagger > *:nth-child(6){animation-delay:.40s}
+
+/* ── Skeleton loader ── */
+.skeleton {
+  background:linear-gradient(90deg,#f0ede9 25%,#e8e4df 50%,#f0ede9 75%);
+  background-size:400px 100%;
+  animation:shimmer 1.4s infinite;
+  border-radius:2px;
+}
+
+/* ── Attack tree node states ── */
+.tree-node { animation:nodeEntry .4s cubic-bezier(.34,1.56,.64,1) both; transition:transform .2s,box-shadow .2s; }
+.tree-node:hover { transform:translateY(-3px); box-shadow:0 8px 20px rgba(30,58,95,.1); }
+.tree-node.cascade { animation:cascadeRed .8s ease forwards !important; }
+.tree-node.selected { outline:2px solid var(--gold); outline-offset:2px; }
+.deadline-pulse { animation:pulseBorder 2s ease-in-out infinite; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--panel)}
+::-webkit-scrollbar-thumb{background:#d1cdca;border-radius:3px}
+
+/* ── Misc helpers ── */
+.dot-grid{background-image:radial-gradient(circle,#E8E4DF 1px,transparent 1px);background-size:24px 24px}
+.letter-shadow{box-shadow:0 8px 30px -8px rgba(0,0,0,.1)}
+.gold-text{color:var(--gold)}
+.view{display:none}
+.view.active{display:block}
+
+/* ── Nav link active ── */
+.nav-active{color:var(--navy)!important;border-bottom:2px solid var(--navy);padding-bottom:4px}
+
+/* ── Progress step ── */
+.step-done  .step-dot{background:var(--green);border-color:var(--green)}
+.step-done  .step-dot::after{content:'✓';color:#fff;font-size:9px;font-weight:700}
+.step-active .step-dot{background:var(--navy);border-color:var(--navy);animation:pulseBorder 1.5s infinite}
+.step-dot{width:20px;height:20px;border-radius:50%;border:2px solid #d1cdca;background:#fff;display:flex;align-items:center;justify-content:center;transition:all .3s;flex-shrink:0}
+
+/* ── Streaming cursor ── */
+.stream-cursor::after{content:'▋';animation:typing .7s step-end infinite;color:var(--navy);font-size:.85em}
+
+/* ── Ripple on button ── */
+.btn-ripple{position:relative;overflow:hidden}
+.btn-ripple::after{content:'';position:absolute;border-radius:50%;background:rgba(255,255,255,.25);width:0;height:0;top:50%;left:50%;transform:translate(-50%,-50%);animation:ripple .5s ease-out}
+.btn-ripple:active::after{width:300px;height:300px}
+
+/* ── View transition ── */
+.view.active { animation:fadeIn .25s ease both }
+
+/* ── Modal overlay ── */
+#api-modal { transition:opacity .25s ease }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════
+     API KEY MODAL
+════════════════════════════════════════ -->
+<div id="api-modal" class="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+  <div class="bg-white border border-[#E8E4DF] p-10 max-w-lg w-full mx-4 animate-scale shadow-2xl">
+    <div class="flex items-center space-x-3 mb-6">
+      <span class="bg-[#1E3A5F] text-white w-9 h-9 flex items-center justify-center font-bold text-sm">A</span>
+      <div>
+        <p class="font-serif text-2xl font-bold leading-none">Advocate</p>
+        <p class="text-[9px] font-bold uppercase tracking-[.2em] text-[#6B6B6B]">Institutional Claim Strategy Platform</p>
+      </div>
+    </div>
+
+    <p class="text-[10px] font-bold uppercase tracking-widest text-[#B83A3A] mb-2">Configuration</p>
+    <h2 class="font-serif text-3xl mb-4">Connect to OpenAI</h2>
+    <p class="text-xs text-[#6B6B6B] leading-relaxed mb-6">Enter your OpenAI API key to enable live AI analysis, strategy generation, and document drafting. Your key is stored only in memory and never persisted.</p>
+
+    <div class="space-y-4">
+      <div>
+        <label class="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] block mb-1.5">OpenAI API Key</label>
+        <input id="api-key-input" type="password" placeholder="sk-..." autocomplete="off"
+          class="w-full bg-[#F9F8F6] border border-[#E8E4DF] p-3 text-xs font-mono focus:border-[#1E3A5F] outline-none transition-colors">
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button onclick="saveApiKey()" class="flex-1 bg-[#1E3A5F] text-white py-3 text-[10px] font-bold tracking-widest uppercase hover:bg-[#1B5E3F] transition-colors btn-ripple">
+          Connect & Continue
+        </button>
+        <button onclick="useSampleMode()" class="flex-1 bg-white border border-[#E8E4DF] text-[#1E3A5F] py-3 text-[10px] font-bold tracking-widest uppercase hover:bg-[#F3F3F3] transition-colors">
+          Use Sample Demo
+        </button>
+      </div>
+    </div>
+
+    <p class="mt-4 text-[9px] text-[#A1A1A1] leading-relaxed">
+      ⚠ Never share API keys publicly. This file calls OpenAI directly from your browser — treat it as a local dev tool.
+    </p>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     NAVIGATION
+════════════════════════════════════════ -->
+<nav id="main-nav" class="sticky top-0 z-50 bg-[#FDFCFB]/95 backdrop-blur-md border-b border-[#E8E4DF] px-8 py-3">
+  <div class="max-w-[1440px] mx-auto flex items-center justify-between">
+    <div class="flex items-center space-x-12">
+      <button onclick="showView('intake')" class="flex items-center space-x-2.5 focus:outline-none group">
+        <span class="bg-[#1E3A5F] text-white w-8 h-8 flex items-center justify-center font-bold text-xs group-hover:bg-[#1B5E3F] transition-colors">A</span>
+        <div class="text-left">
+          <p class="font-serif text-xl font-bold leading-none tracking-tight">Advocate</p>
+          <p class="text-[9px] font-bold uppercase tracking-[.2em] text-[#6B6B6B]">Institutional Claim Strategy Platform</p>
+        </div>
+      </button>
+      <div class="hidden lg:flex space-x-8 text-[11px] font-bold tracking-widest uppercase text-[#4A4A4A]">
+        <button id="nav-intake"       onclick="showView('intake')"       class="nav-link hover:text-[#1B5E3F] transition-colors">Intake</button>
+        <button id="nav-workspace"    onclick="showView('workspace')"    class="nav-link hover:text-[#1B5E3F] transition-colors">Workspace</button>
+        <button id="nav-methodology"  onclick="showView('methodology')"  class="nav-link hover:text-[#1B5E3F] transition-colors">Methodology</button>
+        <button id="nav-evidence"     onclick="showView('evidence')"     class="nav-link hover:text-[#1B5E3F] transition-colors">Evidence</button>
+        <button id="nav-support"      onclick="showView('support')"      class="nav-link hover:text-[#1B5E3F] transition-colors">Support</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <div id="nav-case-label" class="hidden lg:flex flex-col text-right">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Active Case</span>
+        <span id="nav-case-id" class="text-xs font-semibold">#ADV-2047 | Sarah Chen</span>
+      </div>
+      <div id="nav-mode-badge" class="hidden text-[9px] font-bold uppercase tracking-widest px-2 py-1 bg-[#E8E4DF] text-[#6B6B6B]">Demo</div>
+      <button onclick="showView('confirmation')" class="bg-white border border-[#1E3A5F] text-[#1E3A5F] px-4 py-2 text-[10px] font-bold tracking-widest uppercase hover:bg-[#F3F3F3] transition-all">Case Packet</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ════════════════════════════════════════
+     VIEW: INTAKE
+════════════════════════════════════════ -->
+<div id="view-intake" class="view">
+  <section class="max-w-[1440px] mx-auto pt-16 px-8 pb-32">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-20 items-start">
+
+      <!-- Hero -->
+      <div class="max-w-xl stagger">
+        <p class="text-[10px] font-bold uppercase tracking-[.3em] text-[#B83A3A] mb-4">Begin Your Case Review</p>
+        <h1 class="font-serif text-7xl md:text-8xl text-[#1E3A5F] mb-8 leading-[.9] tracking-tighter">
+          Review the<br>denial.<br>
+          <span class="gold-text">Prepare the appeal.</span>
+        </h1>
+        <p class="text-[#6B6B6B] leading-relaxed mb-10 text-sm">Advocate ingests a denial letter or EOB, finds billing errors, detects deadlines, maps escalation paths, and drafts every document you need to fight back.</p>
+        <div class="flex flex-wrap gap-4">
+          <button onclick="loadSampleAndAnalyze()" class="bg-[#1E3A5F] text-white px-6 py-3 text-xs font-bold tracking-widest uppercase hover:bg-[#1B5E3F] transition-colors btn-ripple">Start sample case</button>
+          <button onclick="showView('methodology')" class="bg-[#E8E4DF] text-[#1E3A5F] px-6 py-3 text-xs font-bold tracking-widest uppercase hover:bg-[#D5D1CC] transition-colors">View methodology</button>
+        </div>
+        <div class="mt-12 grid grid-cols-3 gap-6 border-t border-[#E8E4DF] pt-8">
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Inputs</p>
+            <p class="text-xs font-medium leading-relaxed">EOB, denial letters, medical bills</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Outputs</p>
+            <p class="text-xs font-medium leading-relaxed">Appeal letters, complaints, review requests</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Powered by</p>
+            <p class="text-xs font-medium leading-relaxed">GPT-4o · Structured analysis</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Intake Panel -->
+      <div class="bg-[#F9F8F6] border border-[#E8E4DF] p-8 shadow-sm animate-fade-up" style="animation-delay:.1s">
+        <div class="flex justify-between items-center mb-6">
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-[#B83A3A] mb-1">Case Intake</p>
+            <h2 class="font-serif text-3xl">Start with the denial</h2>
+          </div>
+          <span id="intake-mode-tag" class="text-[9px] font-bold bg-[#E8E4DF] px-2 py-1 uppercase tracking-widest">Live AI</span>
+        </div>
+
+        <div class="space-y-5">
+          <div>
+            <label class="text-[10px] font-bold uppercase tracking-widest text-[#6B6B6B] block mb-2">Denial Letter, EOB, or Medical Bill</label>
+            <textarea id="denial-input" rows="7"
+              class="w-full bg-white border border-[#E8E4DF] p-4 text-sm text-[#6B6B6B] leading-relaxed resize-none focus:border-[#1B5E3F] focus:ring-1 focus:ring-[#1B5E3F]/20 outline-none transition-all"
+              placeholder="Paste your denial letter, Explanation of Benefits, or bill text here…"></textarea>
+          </div>
+
+          <!-- Detected summary (shown after paste) -->
+          <div id="intake-preview" class="hidden space-y-3 animate-fade-up">
+            <div class="grid grid-cols-2 gap-4">
+              <div class="bg-white border border-[#E8E4DF] p-3">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-[#1B5E3F] mb-1">Denial Type</p>
+                <p id="pre-denial-type" class="text-xs font-bold">—</p>
+              </div>
+              <div class="bg-white border border-[#FEE2E2] p-3">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-[#B83A3A] mb-1">Deadline</p>
+                <p id="pre-deadline" class="text-xs font-bold">—</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-1">
+            <button onclick="startAnalysis()" class="flex-1 bg-[#1E3A5F] text-white px-6 py-3 text-[10px] font-bold tracking-widest uppercase hover:bg-[#1B5E3F] transition-colors btn-ripple">
+              Analyze &amp; Build Strategy
+            </button>
+            <button onclick="loadSampleAndAnalyze()" class="bg-white border border-[#E8E4DF] text-[#1E3A5F] px-5 py-3 text-[10px] font-bold tracking-widest uppercase hover:bg-[#F3F3F3] transition-colors whitespace-nowrap">
+              Try Sample
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Methodology teaser -->
+  <section class="border-t border-[#E8E4DF] bg-[#F9F8F6] py-20 px-8">
+    <div class="max-w-[1440px] mx-auto">
+      <p class="text-[10px] font-bold uppercase tracking-[.3em] text-[#6B6B6B] mb-4 text-center">How It Works</p>
+      <h2 class="font-serif text-5xl text-center mb-16">Six steps from denial to appeal</h2>
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-px bg-[#E8E4DF] border border-[#E8E4DF]">
+        <div class="bg-white p-6 stagger">
+          <p class="text-[10px] font-bold text-[#6B6B6B] mb-3 uppercase tracking-widest">01</p>
+          <h3 class="font-serif text-lg mb-2">Ingest</h3>
+          <p class="text-[10px] leading-relaxed text-[#6B6B6B]">Parse denial text, codes, charges, and dates.</p>
+        </div>
+        <div class="bg-[#F9F8F6] p-6">
+          <p class="text-[10px] font-bold text-[#6B6B6B] mb-3 uppercase tracking-widest">02</p>
+          <h3 class="font-serif text-lg mb-2">Classify</h3>
+          <p class="text-[10px] leading-relaxed text-[#6B6B6B]">Identify denial type and applicable regulations.</p>
+        </div>
+        <div class="bg-white p-6">
+          <p class="text-[10px] font-bold text-[#6B6B6B] mb-3 uppercase tracking-widest">03</p>
+          <h3 class="font-serif text-lg mb-2">Deadlines</h3>
+          <p class="text-[10px] leading-relaxed text-[#6B6B6B]">Surface every filing window and consequence.</p>
+        </div>
+        <div class="bg-[#F9F8F6] p-6">
+          <p class="text-[10px] font-bold text-[#6B6B6B] mb-3 uppercase tracking-widest">04</p>
+          <h3 class="font-serif text-lg mb-2">Map Evidence</h3>
+          <p class="text-[10px] leading-relaxed text-[#6B6B6B]">Connect clinical notes to each appeal ground.</p>
+        </div>
+        <div class="bg-white p-6">
+          <p class="text-[10px] font-bold text-[#6B6B6B] mb-3 uppercase tracking-widest">05</p>
+          <h3 class="font-serif text-lg mb-2">Strategize</h3>
+          <p class="text-[10px] leading-relaxed text-[#6B6B6B]">Build the attack tree with escalation paths.</p>
+        </div>
+        <div class="bg-[#F9F8F6] p-6">
+          <p class="text-[10px] font-bold text-[#6B6B6B] mb-3 uppercase tracking-widest">06</p>
+          <h3 class="font-serif text-lg mb-2">Draft &amp; Export</h3>
+          <p class="text-[10px] leading-relaxed text-[#6B6B6B]">Generate ready-to-send documents instantly.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ════════════════════════════════════════
+     VIEW: ANALYZING (pipeline progress)
+════════════════════════════════════════ -->
+<div id="view-analyzing" class="view">
+  <div class="min-h-screen flex flex-col items-center justify-center px-8 py-20">
+    <div class="w-full max-w-2xl animate-fade-up">
+
+      <!-- Steps -->
+      <div class="flex items-center justify-between mb-12">
+        <div id="step-1" class="flex flex-col items-center gap-2 flex-1">
+          <div class="step-dot step-active"><span class="text-white text-[9px] font-bold"></span></div>
+          <p class="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B]">Analyze</p>
+        </div>
+        <div class="flex-1 h-px bg-[#E8E4DF] mx-2 mt-[-12px]"></div>
+        <div id="step-2" class="flex flex-col items-center gap-2 flex-1">
+          <div class="step-dot"><span class="text-white text-[9px] font-bold"></span></div>
+          <p class="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B]">Strategy</p>
+        </div>
+        <div class="flex-1 h-px bg-[#E8E4DF] mx-2 mt-[-12px]"></div>
+        <div id="step-3" class="flex flex-col items-center gap-2 flex-1">
+          <div class="step-dot"><span class="text-white text-[9px] font-bold"></span></div>
+          <p class="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B]">Draft</p>
+        </div>
+      </div>
+
+      <!-- Stream output -->
+      <div class="bg-[#F9F8F6] border border-[#E8E4DF] p-8 min-h-[280px] font-mono text-xs leading-relaxed relative overflow-hidden">
+        <div class="absolute top-3 right-3 flex gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#B83A3A]/40"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#C4A747]/40"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#1B5E3F]/40"></span>
+        </div>
+        <p class="text-[10px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-4 font-sans" id="stream-step-label">Scanning document…</p>
+        <div id="stream-output" class="text-[#2C2C2C] stream-cursor whitespace-pre-wrap break-words"></div>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="mt-4 h-0.5 bg-[#E8E4DF] overflow-hidden">
+        <div id="progress-bar" class="h-full bg-[#1E3A5F] transition-all duration-700 ease-out" style="width:0%"></div>
+      </div>
+      <div class="flex justify-between mt-2">
+        <p id="progress-label" class="text-[10px] text-[#6B6B6B]">Starting analysis…</p>
+        <p id="progress-pct" class="text-[10px] font-bold text-[#1E3A5F]">0%</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     VIEW: WORKSPACE
+════════════════════════════════════════ -->
+<div id="view-workspace" class="view">
+  <div class="flex flex-col" style="height:calc(100vh - 57px)">
+
+    <!-- Toolbar -->
+    <div class="bg-white border-b border-[#E8E4DF] px-6 py-2.5 flex items-center justify-between flex-shrink-0">
+      <div class="flex items-center gap-6 text-[10px] font-bold uppercase tracking-widest">
+        <span id="ws-case-id" class="text-[#6B6B6B]">#ADV-2047</span>
+        <span id="ws-denied-amt" class="text-[#B83A3A]">$3,400 Denied</span>
+        <span id="ws-deadline" class="text-[#D97706]">168 days remaining</span>
+        <span id="ws-risk-level" class="px-2 py-0.5 text-white bg-[#B83A3A] text-[9px]">HIGH RISK</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <button id="risk-cascade-btn" onclick="toggleRiskMode()"
+          class="text-[10px] font-bold uppercase tracking-widest text-[#6B6B6B] hover:text-[#B83A3A] border border-[#E8E4DF] px-3 py-1.5 transition-colors">
+          ⚠ Risk Cascade
+        </button>
+        <button onclick="showView('confirmation')" class="bg-[#1E3A5F] text-white px-4 py-2 text-[10px] font-bold tracking-widest uppercase hover:bg-[#1B5E3F] transition-colors btn-ripple">
+          Submit Appeal
+        </button>
+      </div>
+    </div>
+
+    <!-- Three-panel -->
+    <div class="flex flex-1 overflow-hidden">
+
+      <!-- LEFT RAIL -->
+      <aside class="w-72 border-r border-[#E8E4DF] overflow-y-auto flex-shrink-0 bg-white">
+        <div id="left-rail-content" class="p-5 space-y-5">
+          <!-- populated by renderLeftRail() -->
+          <div class="skeleton h-32 w-full"></div>
+          <div class="skeleton h-24 w-full"></div>
+          <div class="skeleton h-40 w-full"></div>
+        </div>
+      </aside>
+
+      <!-- CENTER: attack tree -->
+      <main class="flex-1 flex flex-col overflow-hidden">
+        <!-- Header -->
+        <header class="px-6 py-4 border-b border-[#E8E4DF] bg-white/90 backdrop-blur-sm flex justify-between items-center flex-shrink-0">
+          <div>
+            <h1 class="font-serif text-2xl text-[#1E3A5F]">Attack Tree</h1>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-[#6B6B6B]">Escalation Strategy Graph</p>
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#B83A3A]"></span><span class="text-[9px] font-bold uppercase text-[#6B6B6B]">Denial</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#1B5E3F]"></span><span class="text-[9px] font-bold uppercase text-[#6B6B6B]">Action</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#C4A747]"></span><span class="text-[9px] font-bold uppercase text-[#6B6B6B]">Document</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#2563EB]"></span><span class="text-[9px] font-bold uppercase text-[#6B6B6B]">Evidence</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#D97706]"></span><span class="text-[9px] font-bold uppercase text-[#6B6B6B]">Escalation</span></div>
+          </div>
+        </header>
+
+        <!-- Canvas -->
+        <div id="tree-canvas" class="flex-1 dot-grid overflow-auto relative p-8">
+          <!-- SVG edges -->
+          <svg id="tree-svg" class="absolute inset-0 w-full h-full pointer-events-none" style="min-width:800px;min-height:600px"></svg>
+          <!-- Nodes container -->
+          <div id="tree-nodes" class="relative" style="min-width:800px;min-height:600px">
+            <!-- loading skeleton -->
+            <div class="flex flex-col items-center justify-center h-full gap-4 animate-fade">
+              <div class="skeleton h-16 w-52"></div>
+              <div class="flex gap-4">
+                <div class="skeleton h-20 w-40"></div>
+                <div class="skeleton h-20 w-40"></div>
+                <div class="skeleton h-20 w-40"></div>
+              </div>
+              <div class="flex gap-4">
+                <div class="skeleton h-20 w-40"></div>
+                <div class="skeleton h-20 w-40"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="px-6 py-3 border-t border-[#E8E4DF] bg-white flex justify-between items-center flex-shrink-0">
+          <div class="flex items-center gap-2">
+            <span class="text-[#1B5E3F] text-sm">🛡</span>
+            <span class="text-[10px] font-medium text-[#4A4A4A]">Verified clinical rationale. Clinical Standard Grounding methodology.</span>
+          </div>
+          <p id="tree-footer-hint" class="text-[10px] font-bold uppercase tracking-widest text-[#6B6B6B]">Click a node to open drafting environment →</p>
+        </footer>
+      </main>
+
+      <!-- RIGHT RAIL: draft panel -->
+      <aside id="right-rail" class="w-80 border-l border-[#E8E4DF] flex flex-col flex-shrink-0">
+        <div class="p-4 border-b border-[#E8E4DF] bg-[#F9F8F6] flex items-center justify-between">
+          <div>
+            <span class="text-[9px] font-bold uppercase tracking-widest text-[#C4A747]">Drafting Environment</span>
+            <h3 id="draft-title" class="font-serif text-lg">Select a node</h3>
+          </div>
+          <div class="flex gap-1.5">
+            <button id="btn-copy-draft" onclick="copyDraft()" class="w-8 h-8 border border-[#E8E4DF] bg-white flex items-center justify-center hover:bg-gray-50 text-sm" title="Copy">📋</button>
+            <button onclick="regenerateDraft()" class="w-8 h-8 border border-[#E8E4DF] bg-white flex items-center justify-center hover:bg-gray-50 text-sm" title="Regenerate">↻</button>
+          </div>
+        </div>
+
+        <div id="draft-content" class="flex-1 overflow-y-auto p-5 bg-[#F3F3F3]/30">
+          <!-- default state -->
+          <div id="draft-empty" class="flex flex-col items-center justify-center h-full text-center gap-3">
+            <div class="w-12 h-12 border-2 border-dashed border-[#E8E4DF] flex items-center justify-center text-xl opacity-40 animate-float">📄</div>
+            <p class="text-[11px] text-[#6B6B6B] leading-relaxed">Click any <span class="font-bold text-[#C4A747]">gold document node</span> in the attack tree to generate the draft.</p>
+          </div>
+          <!-- actual draft (hidden until populated) -->
+          <div id="draft-letter" class="hidden bg-white letter-shadow p-8 border border-[#E8E4DF] text-[#2C2C2C]"></div>
+        </div>
+
+        <div id="draft-actions" class="p-4 border-t border-[#E8E4DF] bg-white space-y-2.5">
+          <div class="flex items-center gap-2 text-[10px] font-bold text-[#1B5E3F] uppercase tracking-widest">
+            <span>✨</span><span>Recommended Actions</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="showView('confirmation')" class="bg-[#1E3A5F] text-white py-2.5 text-[10px] font-bold tracking-widest uppercase hover:bg-[#1B5E3F] transition-colors">Sign &amp; Fax</button>
+            <button class="bg-white border border-[#1E3A5F] text-[#1E3A5F] py-2.5 text-[10px] font-bold tracking-widest uppercase hover:bg-gray-50 transition-colors">Send USPS</button>
+          </div>
+          <p id="draft-warning" class="text-[10px] text-[#6B6B6B] leading-relaxed hidden"></p>
+        </div>
+      </aside>
+
+    </div><!-- end three-panel -->
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     VIEW: METHODOLOGY
+════════════════════════════════════════ -->
+<div id="view-methodology" class="view">
+  <div class="max-w-[1440px] mx-auto py-20 px-8 stagger">
+    <p class="text-[10px] font-bold uppercase tracking-[.3em] text-[#6B6B6B] mb-4">Methodology and Responsible Use</p>
+    <div class="flex flex-col lg:flex-row justify-between items-start gap-8 mb-16">
+      <h1 class="font-serif text-6xl leading-tight max-w-xl">How Advocate handles a denial</h1>
+      <p class="max-w-md text-sm text-[#6B6B6B] leading-relaxed lg:text-right lg:pt-4">Structured as a defensible process: intake → classification → evidence mapping → escalation → drafting → export.</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-px bg-[#E8E4DF] border border-[#E8E4DF] mb-16">
+      <div class="bg-white p-10"><p class="text-[10px] font-bold text-[#6B6B6B] mb-4 uppercase tracking-widest">01</p><h3 class="font-serif text-3xl mb-3">Ingest and extract</h3><p class="text-xs leading-relaxed text-[#6B6B6B]">Parse denial text, insurer references, coverage language, charge details, and dates from uploaded documents.</p></div>
+      <div class="bg-[#F9F8F6] p-10"><p class="text-[10px] font-bold text-[#6B6B6B] mb-4 uppercase tracking-widest">02</p><h3 class="font-serif text-3xl mb-3">Classify denial</h3><p class="text-xs leading-relaxed text-[#6B6B6B]">Identify whether the dispute involves medical necessity, coverage terms, documentation failure, coding errors, or utilization review.</p></div>
+      <div class="bg-white p-10"><p class="text-[10px] font-bold text-[#6B6B6B] mb-4 uppercase tracking-widest">03</p><h3 class="font-serif text-3xl mb-3">Detect deadlines</h3><p class="text-xs leading-relaxed text-[#6B6B6B]">Surface immediate filing windows, missing dependencies, and risk cascades if any stage is missed.</p></div>
+      <div class="bg-[#F9F8F6] p-10"><p class="text-[10px] font-bold text-[#6B6B6B] mb-4 uppercase tracking-widest">04</p><h3 class="font-serif text-3xl mb-3">Map evidence</h3><p class="text-xs leading-relaxed text-[#6B6B6B]">Connect clinical notes, prior auth history, plan guidelines, and provider documentation to each viable appeal ground.</p></div>
+      <div class="bg-white p-10"><p class="text-[10px] font-bold text-[#6B6B6B] mb-4 uppercase tracking-widest">05</p><h3 class="font-serif text-3xl mb-3">Generate strategy</h3><p class="text-xs leading-relaxed text-[#6B6B6B]">Build the attack tree showing which actions to take first, which documents unlock the next stage, and where escalation begins.</p></div>
+      <div class="bg-[#F9F8F6] p-10"><p class="text-[10px] font-bold text-[#6B6B6B] mb-4 uppercase tracking-widest">06</p><h3 class="font-serif text-3xl mb-3">Draft and export</h3><p class="text-xs leading-relaxed text-[#6B6B6B]">Produce internal appeals, external review requests, and complaint drafts in a professional, evidence-aware structure.</p></div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-10 border-t border-[#E8E4DF] pt-14">
+      <div><p class="text-[10px] font-bold uppercase tracking-widest text-[#1B5E3F] mb-3">Evidence Grounding</p><h4 class="font-serif text-2xl mb-3">Every action ties back to a case artifact</h4><p class="text-xs text-[#6B6B6B] leading-relaxed">Framed around coverage excerpts, dates, and medical documentation — not open-ended chat.</p></div>
+      <div><p class="text-[10px] font-bold uppercase tracking-widest text-[#1B5E3F] mb-3">Human Review</p><h4 class="font-serif text-2xl mb-3">Drafts prepared for inspection, not blind submission</h4><p class="text-xs text-[#6B6B6B] leading-relaxed">Keeps assumptions visible, identifies missing records, and leaves room for review before export.</p></div>
+      <div><p class="text-[10px] font-bold uppercase tracking-widest text-[#1B5E3F] mb-3">Limits and Handling</p><h4 class="font-serif text-2xl mb-3">Institutional tone without overclaiming</h4><p class="text-xs text-[#6B6B6B] leading-relaxed">Advocate organizes and drafts. It does not represent itself as a law firm or medical authority.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     VIEW: EVIDENCE
+════════════════════════════════════════ -->
+<div id="view-evidence" class="view">
+  <div class="max-w-[1440px] mx-auto py-20 px-8">
+    <p class="text-[10px] font-bold uppercase tracking-[.3em] text-[#6B6B6B] mb-4">Evidence and Research Library</p>
+    <h1 class="font-serif text-6xl mb-12">Explore denial patterns</h1>
+    <div class="bg-[#F9F8F6] border border-[#E8E4DF] p-10">
+      <div class="relative mb-8 max-w-3xl">
+        <input type="text" placeholder="Search appeal grounds, insurer patterns, required documents…"
+          class="w-full bg-white border border-[#E8E4DF] p-4 pl-11 text-sm focus:border-[#1B5E3F] outline-none transition-colors">
+        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+      </div>
+      <div class="flex flex-wrap gap-2 mb-10">
+        <span class="text-[9px] font-bold border border-[#E8E4DF] px-3 py-1.5 uppercase tracking-widest bg-white cursor-pointer hover:bg-gray-50 flex items-center gap-2">Medical necessity <span class="text-gray-300">×</span></span>
+        <span class="text-[9px] font-bold border border-[#E8E4DF] px-3 py-1.5 uppercase tracking-widest bg-white cursor-pointer hover:bg-gray-50 flex items-center gap-2">Anthem BCBS <span class="text-gray-300">×</span></span>
+        <span class="text-[9px] font-bold border border-[#E8E4DF] px-3 py-1.5 uppercase tracking-widest bg-white cursor-pointer hover:bg-gray-50">Clinical support docs</span>
+      </div>
+      <div class="grid md:grid-cols-3 gap-5 mb-5 stagger">
+        <div class="bg-white border border-[#E8E4DF] p-8"><p class="text-[10px] font-bold uppercase tracking-widest text-[#B83A3A] mb-2">Common Denial</p><h3 class="font-serif text-2xl mb-3">Medical necessity</h3><p class="text-xs leading-relaxed text-[#6B6B6B]">Requires progression evidence, specialist notes, and proof conservative treatment failed.</p></div>
+        <div class="bg-white border border-[#E8E4DF] p-8"><p class="text-[10px] font-bold uppercase tracking-widest text-[#1B5E3F] mb-2">Required Support</p><h3 class="font-serif text-2xl mb-3">Physician addendum</h3><p class="text-xs leading-relaxed text-[#6B6B6B]">A short clinical statement tying symptoms, failed treatment, and imaging to plan criteria.</p></div>
+        <div class="bg-white border border-[#E8E4DF] p-8"><p class="text-[10px] font-bold uppercase tracking-widest text-[#D97706] mb-2">Escalation Path</p><h3 class="font-serif text-2xl mb-3">External review</h3><p class="text-xs leading-relaxed text-[#6B6B6B]">Appropriate when internal appeal fails. Independent reviewers overturn ~40% of denials.</p></div>
+      </div>
+      <div class="grid md:grid-cols-2 gap-5 stagger">
+        <div class="bg-white border border-[#E8E4DF] p-8"><p class="text-[10px] font-bold uppercase tracking-widest text-[#2563EB] mb-2">Coding Error</p><h3 class="font-serif text-2xl mb-3">CPT code mismatch</h3><p class="text-xs leading-relaxed text-[#6B6B6B]">Billing under the wrong CPT code leads to automatic denial. Correcting the code often resolves without appeal.</p></div>
+        <div class="bg-white border border-[#E8E4DF] p-8"><p class="text-[10px] font-bold uppercase tracking-widest text-[#C4A747] mb-2">Insurer Pattern</p><h3 class="font-serif text-2xl mb-3">Template rationale mismatch</h3><p class="text-xs leading-relaxed text-[#6B6B6B]">Denial language may repeat standardized phrasing even where the case record contains clear supporting evidence.</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     VIEW: SUPPORT
+════════════════════════════════════════ -->
+<div id="view-support" class="view">
+  <div class="max-w-[1440px] mx-auto py-20 px-8">
+    <p class="text-[10px] font-bold uppercase tracking-[.3em] text-[#6B6B6B] mb-4">Support and Expert Review</p>
+    <h1 class="font-serif text-6xl mb-12">Prepare the next escalation step</h1>
+    <div class="grid lg:grid-cols-12 gap-16">
+      <div class="lg:col-span-7 space-y-6">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-[#B83A3A]">Request Help</p>
+        <h3 class="font-serif text-4xl">Escalation support</h3>
+        <div class="grid grid-cols-2 gap-5">
+          <div><label class="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] block mb-1.5">Full Name</label><input type="text" value="Sarah Chen" class="w-full bg-[#F9F8F6] border border-[#E8E4DF] p-3.5 text-xs outline-none focus:border-[#1B5E3F] transition-colors"></div>
+          <div><label class="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] block mb-1.5">Email</label><input type="email" value="sarah@example.com" class="w-full bg-[#F9F8F6] border border-[#E8E4DF] p-3.5 text-xs outline-none focus:border-[#1B5E3F] transition-colors"></div>
+        </div>
+        <div><label class="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] block mb-1.5">Support Type</label>
+          <select class="w-full bg-[#F9F8F6] border border-[#E8E4DF] p-3.5 text-xs outline-none focus:border-[#1B5E3F] appearance-none">
+            <option>Review internal appeal before filing</option><option>Identify missing evidence artifacts</option><option>Draft external review request</option><option>File state insurance commissioner complaint</option>
+          </select>
+        </div>
+        <div><label class="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] block mb-1.5">Case Notes</label><textarea rows="5" class="w-full bg-[#F9F8F6] border border-[#E8E4DF] p-3.5 text-xs outline-none focus:border-[#1B5E3F] resize-none transition-colors">Need a final review of the evidence packet and physician statement before submission.</textarea></div>
+        <div class="flex gap-4">
+          <button class="bg-[#1E3A5F] text-white px-8 py-3 text-[10px] font-bold tracking-widest uppercase hover:bg-[#1B5E3F] transition-colors btn-ripple">Request review</button>
+          <button class="bg-white border border-[#E8E4DF] text-[#1E3A5F] px-8 py-3 text-[10px] font-bold tracking-widest uppercase hover:bg-gray-50 transition-colors">Export case packet</button>
+        </div>
+      </div>
+      <div class="lg:col-span-5 space-y-8">
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-[#1B5E3F] mb-3">Available Guidance</p>
+          <h4 class="font-serif text-3xl mb-4">What the support flow can do</h4>
+          <ul class="space-y-3">
+            <li class="flex items-start gap-3 text-sm text-[#4A4A4A]"><span class="text-[#1B5E3F] font-bold mt-0.5">✓</span><span>Package denial, evidence, and draft documents into a single submission</span></li>
+            <li class="flex items-start gap-3 text-sm text-[#4A4A4A]"><span class="text-[#1B5E3F] font-bold mt-0.5">✓</span><span>Highlight missing attachments before filing</span></li>
+            <li class="flex items-start gap-3 text-sm text-[#4A4A4A]"><span class="text-[#1B5E3F] font-bold mt-0.5">✓</span><span>Prepare the next escalation path if the current stage fails</span></li>
+            <li class="flex items-start gap-3 text-sm text-[#4A4A4A]"><span class="text-[#1B5E3F] font-bold mt-0.5">✓</span><span>Draft regulator complaints with correct regulatory citations</span></li>
+          </ul>
+        </div>
+        <div class="bg-[#F9F8F6] border border-[#E8E4DF] p-8">
+          <p class="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-2">Case Packet</p>
+          <h4 class="font-serif text-2xl mb-3">Ready for export</h4>
+          <p class="text-xs text-[#6B6B6B] leading-relaxed mb-5">Appeal draft, evidence checklist, denial summary, and deadline table bundled as a single packet.</p>
+          <div class="h-px bg-[#E8E4DF] mb-5"></div>
+          <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
+            <span>📄</span><span id="packet-filename">Case_Packet_Chen_UHC.pdf</span>
+          </div>
+          <div class="mt-4">
+            <div class="flex justify-between mb-1"><span class="text-[10px] font-bold uppercase tracking-widest text-[#6B6B6B]">Completeness</span><span id="packet-pct" class="text-[10px] font-bold text-[#C4A747]">65%</span></div>
+            <div class="w-full h-1 bg-[#F3F3F3]"><div class="h-full bg-[#C4A747] transition-all duration-700" style="width:65%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     VIEW: CONFIRMATION
+════════════════════════════════════════ -->
+<div id="view-confirmation" class="view">
+  <div class="max-w-[1440px] mx-auto px-8 py-10">
+    <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-2">
+      <button onclick="showView('workspace')" class="hover:text-[#1E3A5F] transition-colors">Workspace</button>
+      <span>/</span><span class="text-[#1E3A5F]">Submission Confirmation</span>
+    </div>
+    <h1 class="font-serif text-4xl mb-1">Finalize Submission</h1>
+    <p class="text-sm text-[#6B6B6B] mb-8 font-light">Review your appeal packet and confirm delivery channel.</p>
+
+    <div class="bg-white border border-[#E8E4DF] p-5 mb-8 flex items-center justify-between animate-fade-up">
+      <div class="flex items-center gap-8">
+        <div class="flex items-center gap-3"><span class="text-2xl text-[#1B5E3F]">✅</span><div><span class="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] block">Packet Content</span><span class="text-xs font-semibold">Internal Appeal Letter + 4 Evidence Attachments</span></div></div>
+        <div class="h-10 w-px bg-[#E8E4DF]"></div>
+        <div><span class="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] block">Recipient</span><span id="conf-recipient" class="text-xs font-semibold">United HealthCare | Grievances &amp; Appeals Dept</span></div>
+      </div>
+      <button onclick="showView('workspace')" class="text-[10px] font-bold uppercase tracking-widest text-[#1E3A5F] border-b border-[#1E3A5F] pb-0.5 hover:opacity-70">Review Documents</button>
+    </div>
+
+    <div class="grid lg:grid-cols-12 gap-8">
+      <div class="lg:col-span-7 space-y-5">
+        <!-- Method -->
+        <div class="bg-white border border-[#E8E4DF] p-7">
+          <h2 class="text-xs font-bold uppercase tracking-[.2em] mb-5 text-[#1E3A5F]">Submission Method</h2>
+          <div class="grid md:grid-cols-2 gap-4">
+            <label class="flex flex-col p-5 border-2 border-[#1E3A5F] bg-[#FDFCFB] cursor-pointer">
+              <input type="radio" name="method" class="hidden" checked>
+              <div class="flex justify-between items-start mb-3"><span class="text-2xl">🖨</span><div class="w-4 h-4 rounded-full border-4 border-[#1E3A5F] bg-white"></div></div>
+              <span class="text-sm font-bold">Digital Fax</span>
+              <p class="text-[11px] text-[#6B6B6B] mt-1 leading-relaxed">Secure transmission. Near-instant confirmation.</p>
+              <div class="mt-3 pt-3 border-t border-[#E8E4DF] flex justify-between"><span class="text-[10px] font-bold uppercase text-[#1B5E3F]">Recommended</span><span class="text-[10px] font-bold uppercase text-[#6B6B6B]">Free</span></div>
+            </label>
+            <label class="flex flex-col p-5 border border-[#E8E4DF] bg-white hover:border-[#1E3A5F] transition-colors cursor-pointer">
+              <input type="radio" name="method" class="hidden">
+              <div class="flex justify-between items-start mb-3"><span class="text-2xl">✉</span><div class="w-4 h-4 rounded-full border border-[#E8E4DF] bg-white"></div></div>
+              <span class="text-sm font-bold">USPS Certified Mail</span>
+              <p class="text-[11px] text-[#6B6B6B] mt-1 leading-relaxed">Physical delivery with signature tracking. 3–5 days.</p>
+              <div class="mt-3 pt-3 border-t border-[#E8E4DF] flex justify-between"><span class="text-[10px] font-bold uppercase text-[#6B6B6B]">Priority</span><span class="text-[10px] font-bold uppercase text-[#6B6B6B]">$14.50</span></div>
+            </label>
+          </div>
+        </div>
+        <!-- Verification -->
+        <div class="bg-white border border-[#E8E4DF] p-7">
+          <h2 class="text-xs font-bold uppercase tracking-[.2em] mb-5 text-[#1E3A5F]">Verification &amp; Notifications</h2>
+          <div class="space-y-3">
+            <div><label class="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] block mb-1.5">Confirmation Email</label><input type="email" value="sarah.chen@example.com" class="w-full bg-[#F9F8F6] border border-[#E8E4DF] p-3 text-xs outline-none focus:ring-1 focus:ring-[#1E3A5F] transition-colors"></div>
+            <div class="flex items-center gap-3"><input type="checkbox" id="sms" class="w-4 h-4" checked><label for="sms" class="text-[11px] text-[#4A4A4A]">Send SMS status updates</label></div>
+          </div>
+        </div>
+        <!-- Warning -->
+        <div class="bg-[#FEF2F2] border border-[#FEE2E2] p-5 flex items-start gap-4">
+          <span class="text-xl text-[#B83A3A] mt-0.5">⚠️</span>
+          <div><span class="text-[11px] font-bold uppercase tracking-widest text-[#B83A3A] block mb-1">Institutional Warning</span><p class="text-[11px] leading-relaxed text-[#7F1D1D]">Once transmitted, no further modifications can be made to the claim packet through this interface. Verify all evidence and clinical rationale before proceeding.</p></div>
+        </div>
+        <div class="flex gap-4">
+          <button class="flex-1 bg-[#1E3A5F] text-white py-4 text-[11px] font-bold tracking-[.2em] uppercase hover:bg-[#1B5E3F] transition-colors btn-ripple">Transmit Appeal Packet</button>
+          <button onclick="showView('workspace')" class="bg-white border border-[#E8E4DF] text-[#6B6B6B] py-4 px-6 text-[11px] font-bold tracking-[.2em] uppercase hover:bg-gray-50 transition-colors">Return</button>
+        </div>
+      </div>
+
+      <!-- Delivery tracker -->
+      <div class="lg:col-span-5">
+        <div class="bg-[#F9F8F6] border border-[#E8E4DF] p-7 sticky top-24">
+          <div class="flex items-center justify-between mb-7">
+            <h2 class="text-xs font-bold uppercase tracking-[.2em] text-[#1E3A5F]">Delivery Tracker</h2>
+            <span class="px-2 py-1 bg-white border border-[#E8E4DF] text-[9px] font-bold uppercase tracking-wider">Pending</span>
+          </div>
+          <div class="relative space-y-7 pl-2" style="--tw-before-bg:var(--border)">
+            <div class="absolute left-[7px] top-5 bottom-0 w-[2px] bg-[#E8E4DF]"></div>
+            <div class="relative flex items-start gap-5 z-10"><div class="w-4 h-4 rounded-full bg-[#1E3A5F] ring-4 ring-white flex-shrink-0 mt-0.5"></div><div><span class="text-[11px] font-bold uppercase text-[#1E3A5F] block">Awaiting Confirmation</span><span class="text-[10px] text-[#6B6B6B]">Verifying case assets and insurer routing.</span><span class="text-[9px] font-bold text-[#1E3A5F] block mt-1">CURRENT STEP</span></div></div>
+            <div class="relative flex items-start gap-5 z-10 opacity-40"><div class="w-4 h-4 rounded-full bg-white border-2 border-[#E8E4DF] ring-4 ring-[#F9F8F6] flex-shrink-0 mt-0.5"></div><div><span class="text-[11px] font-bold uppercase text-[#6B6B6B] block">Transmission Sent</span><span class="text-[10px] text-[#6B6B6B]">Packet dispatched via secure digital fax.</span></div></div>
+            <div class="relative flex items-start gap-5 z-10 opacity-40"><div class="w-4 h-4 rounded-full bg-white border-2 border-[#E8E4DF] ring-4 ring-[#F9F8F6] flex-shrink-0 mt-0.5"></div><div><span class="text-[11px] font-bold uppercase text-[#6B6B6B] block">Insurer Acknowledged</span><span class="text-[10px] text-[#6B6B6B]">Receipt verification from insurer routing system.</span></div></div>
+            <div class="relative flex items-start gap-5 z-10 opacity-40"><div class="w-4 h-4 rounded-full bg-white border-2 border-[#E8E4DF] ring-4 ring-[#F9F8F6] flex-shrink-0 mt-0.5"></div><div><span class="text-[11px] font-bold uppercase text-[#6B6B6B] block">Proof of Delivery</span><span class="text-[10px] text-[#6B6B6B]">Institutional confirmation log generated.</span></div></div>
+          </div>
+          <div class="mt-8 bg-white border border-[#E8E4DF] p-5 space-y-3">
+            <div class="flex justify-between"><span class="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Est. Delivery</span><span class="text-xs font-semibold">Today</span></div>
+            <div class="flex justify-between"><span class="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Submission SLA</span><span class="text-xs font-semibold text-[#1B5E3F]">&lt; 2 Hours</span></div>
+            <div class="pt-3 border-t border-[#F3F3F3] flex justify-between"><span class="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Tracking ID</span><span class="text-[10px] font-mono text-[#1E3A5F]" id="tracking-id">ADV-TXN-00001-UHC</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════════ -->
+<script>
+// ── Prompts (from lib/prompts.ts) ────────────────────────────
+const ANALYZE_PROMPT = `You are Advocate, an expert medical billing analyst and patient rights AI agent. You analyze medical bills, Explanation of Benefits (EOB) documents, and insurance denial letters.
+
+Analyze the following document and return a JSON object with this EXACT structure:
+{
+  "summary": "2-3 sentence summary of key issues",
+  "totalBilled": "$X,XXX.XX",
+  "totalOvercharged": "$X,XXX.XX",
+  "deniedAmount": "$X,XXX.XX",
+  "billingErrors": [{"id":"err_1","type":"duplicate|upcoding|wrong_code|unbundling|balance_billing|other","description":"Clear description","originalCharge":"$XXX","estimatedOvercharge":"$XXX","cptCode":"XXXXX","evidence":"What proves this error"}],
+  "appealGrounds": [{"id":"appeal_1","basis":"medical_necessity|coverage_terms|regulatory|coding_error|timely_filing","regulation":"ACA §XXXX","argument":"Specific argument","strength":"strong|moderate|weak"}],
+  "deadlines": [{"id":"deadline_1","action":"What to do","date":"Date or timeframe","daysRemaining":30,"consequence":"What happens if missed","urgency":"critical|high|medium|low"}],
+  "riskLevel": "critical|high|medium|low",
+  "patientContext": "Brief context about the patient"
+}
+
+Look for: duplicate charges, upcoding, wrong CPT/ICD codes, unbundling, balance billing, denial appeal paths, coverage terms, regulations, deadlines. Always find actionable items.
+
+Document:
+`;
+
+const STRATEGY_PROMPT = `You are Advocate, an expert patient rights strategist. Given an analysis, build a multi-step attack tree strategy as a directed graph.
+
+Return JSON with this EXACT structure:
+{
+  "nodes": [{"id":"node_1","type":"action|deadline|document|escalation|outcome","label":"3-6 word label","description":"Detailed description","urgency":"immediate|this_week|this_month","status":"ready|blocked|optional","documentType":"appeal_letter|complaint|itemized_request|external_review"}],
+  "edges": [{"id":"edge_1","source":"node_1","target":"node_2","label":"next step|if denied|parallel","type":"sequence|fallback|parallel"}],
+  "reasoning": "2-3 sentence strategy explanation"
+}
+
+Rules: Start with highest-impact lowest-effort actions. Include escalation paths. 8-15 nodes. Every billing error → action node. Every appeal ground → document node. End with outcome nodes.
+
+Analysis:
+`;
+
+const DRAFT_PROMPT = `You are Advocate, an expert at drafting formal medical and insurance documents. Write professional, assertive, legally-grounded documents.
+
+Draft the requested document as a proper letter with: date, recipient address block ([RECIPIENT ADDRESS] placeholder), subject line with reference numbers, numbered points, regulatory citations, clear call to action with deadline, signature block ([YOUR NAME] / [YOUR ADDRESS] placeholders).
+
+Context:
+`;
+
+// ── Sample data (from lib/sample-data.ts) ────────────────────
+const SAMPLE_EOB = `EXPLANATION OF BENEFITS
+Insurance Provider: United HealthCare PPO
+Policy #: UHC-2026-PPO-4481
+Member: Sarah Chen
+Date of Service: February 28, 2026
+Provider: Memorial General Hospital
+Claim #: CLM-2026-0228-9947
+
+ITEMIZED CHARGES:
+1. Emergency Room Visit (Level 4) - CPT 99284 ........... $1,850.00
+2. MRI Knee w/o Contrast - CPT 70553 .................... $3,400.00
+3. MRI Knee w/o Contrast - CPT 70551 .................... $2,200.00
+4. Physical Therapy Eval - CPT 97161 .................... $320.00
+5. Physical Therapy Eval - CPT 97161 .................... $320.00
+6. Comprehensive Metabolic Panel - CPT 80053 ............ $0.00
+   - Basic Metabolic Panel - CPT 80048 .................. $185.00
+   - Hepatic Function Panel - CPT 80076 ................. $210.00
+   - Albumin - CPT 82040 ............................... $45.00
+   - Total Protein - CPT 84155 .......................... $42.00
+7. X-Ray Knee (2 views) - CPT 73560 .................... $380.00
+8. Knee Brace/Support - HCPCS L1820 .................... $285.00
+9. Physician Consultation - CPT 99243 ................... $475.00
+10. Acetaminophen IV - HCPCS J0131 ...................... $480.00
+
+TOTAL CHARGES: $10,192.00
+INSURANCE PAID: $4,242.00
+
+DENIAL NOTICE:
+Line 2 (MRI Knee - CPT 70553): DENIED - Not medically necessary.
+Reason Code: PR-234 — "Advanced imaging not authorized for initial visit. Prior authorization required per plan Section 4.2(b)."
+Denied Amount: $3,400.00
+
+PATIENT RESPONSIBILITY: $4,800.00
+APPEAL RIGHTS: You may appeal within 180 days. External Review available after internal appeal per ACA §2719.
+Date of Notice: March 1, 2026`;
+
+const SAMPLE_ANALYSIS = {
+  summary: "Emergency room visit for knee injury. Multiple billing errors detected including a duplicate MRI charge, duplicate PT evaluation, and unbundled lab panel. The MRI was denied as 'not medically necessary' despite being physician-ordered — a strong appeal candidate.",
+  totalBilled: "$10,192.00", totalOvercharged: "$3,622.00", deniedAmount: "$3,400.00",
+  billingErrors: [
+    { id:"err_1", type:"wrong_code", description:"MRI billed as CPT 70553 (with contrast, $3,400) while CPT 70551 (without contrast, $2,200) was also charged. Only one MRI performed.", originalCharge:"$3,400.00", estimatedOvercharge:"$1,200.00", cptCode:"70553→70551", evidence:"Both CPT 70553 and 70551 appear; only one MRI was performed." },
+    { id:"err_2", type:"duplicate", description:"Physical Therapy Evaluation (CPT 97161) billed twice at $320 each on same date.", originalCharge:"$640.00", estimatedOvercharge:"$320.00", cptCode:"97161", evidence:"Lines 4 and 5 are identical charges on the same date of service." },
+    { id:"err_3", type:"unbundling", description:"Comprehensive Metabolic Panel (CPT 80053) listed at $0 but component tests billed individually for $482 total.", originalCharge:"$482.00", estimatedOvercharge:"$232.00", cptCode:"80053 unbundled", evidence:"CPT 80053 at $0 while components are billed separately." },
+    { id:"err_4", type:"upcoding", description:"IV Acetaminophen billed at $480 vs. $20-40 wholesale cost — extreme markup.", originalCharge:"$480.00", estimatedOvercharge:"$440.00", cptCode:"J0131", evidence:"1,200%+ markup on a common medication." }
+  ],
+  appealGrounds: [
+    { id:"appeal_1", basis:"medical_necessity", argument:"MRI ordered by treating ER physician after exam and X-ray. Emergency MRIs are exempt from prior auth under ACA emergency service protections.", regulation:"ACA §2719, 42 USC §300gg-19a", strength:"strong" },
+    { id:"appeal_2", basis:"coverage_terms", argument:"Plan Section 4.2(b) prior auth requirement does not apply to emergency department services per Plan Section 3.1 Emergency Benefits.", regulation:"Plan §3.1 Emergency Benefits", strength:"strong" },
+    { id:"appeal_3", basis:"coding_error", argument:"Even if MRI charge stands, CPT 70553 (with contrast) is incorrectly coded — procedure was without contrast (CPT 70551). Correction alone saves $1,200.", regulation:null, strength:"strong" },
+    { id:"appeal_4", basis:"regulatory", argument:"Under No Surprises Act, emergency services must be covered without prior authorization.", regulation:"No Surprises Act §2799A-1", strength:"moderate" }
+  ],
+  deadlines: [
+    { id:"dl_1", action:"File internal appeal", date:"August 28, 2026", daysRemaining:168, consequence:"Permanently lose the right to appeal the $3,400 MRI denial.", urgency:"high" },
+    { id:"dl_2", action:"Request itemized bill", date:"Within 30 days recommended", daysRemaining:17, consequence:"Harder to dispute after time passes. Hospital may send to collections.", urgency:"critical" },
+    { id:"dl_3", action:"File external review if internal denied", date:"Within 60 days of denial", daysRemaining:-1, consequence:"Lose access to independent third-party review.", urgency:"medium" }
+  ],
+  riskLevel: "high",
+  patientContext: "Sarah Chen, ER visit Feb 28 2026, knee injury. Insurance denied MRI as not medically necessary."
+};
+
+const SAMPLE_ATTACK_TREE = {
+  nodes: [
+    { id:"n0", type:"action",    label:"Request Itemized Bill",        description:"Call Memorial General billing and request full itemized bill with CPT codes. Legal right under federal law. Compare against EOB.", urgency:"immediate", status:"ready",   documentType:"itemized_request" },
+    { id:"n1", type:"document",  label:"File Billing Dispute",         description:"Send formal dispute letter citing: duplicate PT ($320), CPT code error ($1,200), unbundled labs ($232), IV Tylenol markup ($440). Total: $2,192.", urgency:"immediate", status:"ready",   documentType:"itemized_request" },
+    { id:"n2", type:"action",    label:"Correct CPT Code",             description:"Contact hospital coding dept. Request correction of CPT 70553 → 70551. Saves $1,200 regardless of appeal outcome.", urgency:"immediate", status:"ready" },
+    { id:"n3", type:"action",    label:"Get Physician Letter",         description:"Ask treating ER physician for a letter of medical necessity supporting the MRI order. Significantly strengthens appeal.", urgency:"this_week", status:"ready" },
+    { id:"n4", type:"document",  label:"File Internal Appeal",         description:"Formal appeal to United HealthCare challenging MRI denial: emergency exemption (ACA §2719), medical necessity, coding error. Include physician letter.", urgency:"this_week", status:"ready", documentType:"appeal_letter" },
+    { id:"n5", type:"deadline",  label:"Appeal Deadline: Aug 28",      description:"180-day appeal window closes August 28, 2026. Missing it permanently forfeits the right to appeal the $3,400 MRI denial.", urgency:"this_month", status:"ready" },
+    { id:"n6", type:"escalation",label:"File External Review",         description:"If internal appeal denied, file Independent External Review under ACA §2719 within 60 days. External reviewers overturn ~40% of denials.", urgency:"this_month", status:"blocked", documentType:"external_review" },
+    { id:"n7", type:"escalation",label:"State Insurance Complaint",    description:"File complaint with State Insurance Commissioner. Triggers regulatory investigation. Can be filed in parallel with external review.", urgency:"this_month", status:"optional", documentType:"complaint" },
+    { id:"n8", type:"outcome",   label:"Potential Recovery: $5,814",   description:"Billing corrections: $2,192 + MRI appeal: $3,400 + CPT correction: $1,200. Even partial success recovers $2,192 from billing errors.", urgency:"this_month", status:"blocked" }
+  ],
+  edges: [
+    { id:"e1",  source:"n0", target:"n1", label:"then dispute",    type:"sequence" },
+    { id:"e2",  source:"n0", target:"n2", label:"parallel",        type:"parallel" },
+    { id:"e3",  source:"n3", target:"n4", label:"attach to appeal",type:"sequence" },
+    { id:"e4",  source:"n2", target:"n4", label:"include fix",     type:"sequence" },
+    { id:"e5",  source:"n4", target:"n5", label:"before deadline", type:"sequence" },
+    { id:"e6",  source:"n4", target:"n6", label:"if denied",       type:"fallback" },
+    { id:"e7",  source:"n6", target:"n7", label:"in parallel",     type:"parallel" },
+    { id:"e8",  source:"n6", target:"n8", label:"if approved",     type:"sequence" },
+    { id:"e9",  source:"n1", target:"n8", label:"billing fixes",   type:"sequence" },
+    { id:"e10", source:"n7", target:"n8", label:"pressure",        type:"sequence" }
+  ],
+  reasoning: "Prioritizes immediate billing corrections (itemized bill, CPT fix) for quick wins while building the main appeal. Physician letter strengthens appeal significantly. External review is the strongest fallback. Even without winning the appeal, billing error corrections alone recover $2,192."
+};
+
+const SAMPLE_DRAFT = `[YOUR NAME]
+[YOUR ADDRESS]
+
+${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
+
+United HealthCare Appeals Department
+[RECIPIENT ADDRESS]
+
+RE: APPEAL OF CLAIM DENIAL
+Claim Number: CLM-2026-0228-9947
+Policy Number: UHC-2026-PPO-4481
+Member: Sarah Chen
+Date of Service: February 28, 2026
+Denied Service: MRI Knee (CPT 70553 / 70551)
+Denied Amount: $3,400.00
+
+Dear Appeals Review Board:
+
+I am formally requesting reconsideration of the denial of my MRI claim, referenced above. The denial was issued under Reason Code PR-234, citing lack of prior authorization per Plan Section 4.2(b). This denial is incorrect for the following reasons:
+
+1. EMERGENCY SERVICE EXEMPTION
+
+The MRI was performed during an emergency department visit at Memorial General Hospital on February 28, 2026. Under the Affordable Care Act (42 USC §300gg-19a) and your plan's own Emergency Benefits provision (Section 3.1), emergency services are explicitly exempt from prior authorization requirements. The denial reason citing Section 4.2(b) does not apply to emergency department services.
+
+2. MEDICAL NECESSITY
+
+The MRI was ordered by the treating emergency physician after physical examination found insufficient findings on initial X-ray to rule out ligament damage or fracture. The imaging was medically necessary to determine the appropriate course of treatment and prevent harm from delayed diagnosis. I have attached a Letter of Medical Necessity from the treating physician.
+
+3. CODING ERROR — SEPARATE GROUND FOR RELIEF
+
+Even if the prior authorization argument is not accepted, the MRI was coded as CPT 70553 (MRI with contrast, $3,400.00) when the procedure was performed without contrast (CPT 70551, $2,200.00). This coding error resulted in a $1,200 overcharge independent of the denial. I request correction of this code and corresponding adjustment to the billed amount.
+
+4. REGULATORY COMPLIANCE
+
+Under the No Surprises Act (§2799A-1), emergency services must be covered at in-network rates without prior authorization requirements. Denial of emergency diagnostic imaging may constitute a violation of federal patient protection regulations.
+
+REQUEST FOR RELIEF
+
+I respectfully request that you:
+(a) Overturn the denial and approve coverage of the MRI under emergency service provisions;
+(b) In the alternative, correct the CPT code from 70553 to 70551 and adjust the patient responsibility accordingly;
+(c) Provide the full utilization review rationale and reviewer credentials within 30 days per ACA §2719 requirements.
+
+Please respond within 30 days as required by applicable regulations. I reserve all rights to escalate to Independent External Review under ACA §2719 if this appeal is denied.
+
+Sincerely,
+
+_________________________________
+[YOUR NAME]
+[YOUR ADDRESS]
+[YOUR PHONE / EMAIL]`;
+
+// ── App state ────────────────────────────────────────────────
+const STATE = {
+  apiKey: null,
+  isSampleMode: false,
+  analysis: null,
+  attackTree: null,
+  selectedNodeId: null,
+  draftContent: null,
+  riskMode: false,
+  abortController: null
+};
+
+// ── Modal / key management ───────────────────────────────────
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key.startsWith('sk-')) { alert('Please enter a valid OpenAI API key (starts with sk-).'); return; }
+  STATE.apiKey = key;
+  STATE.isSampleMode = false;
+  closeModal();
+  document.getElementById('intake-mode-tag').textContent = 'Live AI';
+  document.getElementById('nav-mode-badge').classList.add('hidden');
+}
+
+function useSampleMode() {
+  STATE.isSampleMode = true;
+  STATE.apiKey = null;
+  closeModal();
+  document.getElementById('intake-mode-tag').textContent = 'Demo';
+  document.getElementById('nav-mode-badge').classList.remove('hidden');
+}
+
+function closeModal() {
+  const m = document.getElementById('api-modal');
+  m.style.opacity = '0';
+  setTimeout(() => m.style.display = 'none', 250);
+}
+
+// ── Navigation ───────────────────────────────────────────────
+const VIEWS = ['intake','analyzing','workspace','methodology','evidence','support','confirmation'];
+function showView(name) {
+  VIEWS.forEach(v => document.getElementById('view-'+v)?.classList.remove('active'));
+  document.getElementById('view-'+name)?.classList.add('active');
+  document.querySelectorAll('.nav-link').forEach(b => b.classList.remove('nav-active'));
+  const nb = document.getElementById('nav-'+name);
+  if (nb) nb.classList.add('nav-active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── Sample loading ───────────────────────────────────────────
+function loadSampleAndAnalyze() {
+  const ta = document.getElementById('denial-input');
+  ta.value = '';
+  let i = 0;
+  const type = () => { if(i < SAMPLE_EOB.length) { ta.value += SAMPLE_EOB[i++]; setTimeout(type, 4); } else { startAnalysis(); } };
+  type();
+}
+
+// ── Pipeline: Analyze → Strategy → Draft ────────────────────
+async function startAnalysis() {
+  const text = document.getElementById('denial-input').value.trim();
+  if (!text && !STATE.isSampleMode) { alert('Please paste a denial letter or EOB to analyze.'); return; }
+  showView('analyzing');
+  resetSteps();
+  setProgress(0, 'Initializing analysis pipeline…');
+
+  try {
+    if (STATE.isSampleMode) {
+      await runSamplePipeline();
+    } else {
+      await runLivePipeline(text);
+    }
+  } catch(e) {
+    if (e.name === 'AbortError') return;
+    appendStream('\n\n⚠ Error: ' + e.message + '\n\nFalling back to sample data…');
+    await sleep(1200);
+    STATE.analysis = SAMPLE_ANALYSIS;
+    STATE.attackTree = SAMPLE_ATTACK_TREE;
+    STATE.isSampleMode = true;
+    populateWorkspace();
+    showView('workspace');
+  }
+}
+
+async function runSamplePipeline() {
+  // Step 1: Analyze
+  activateStep(1);
+  setStreamLabel('Scanning document for billing errors…');
+  setProgress(5, 'Analyzing document…');
+  const lines = [
+    '→ Parsing EOB structure and charge codes…',
+    '→ Found: Emergency Room Visit CPT 99284 ($1,850)',
+    '→ Flag: MRI CPT 70553 billed — checking against CPT 70551…',
+    '⚠ Billing error detected: wrong_code — CPT 70553 vs 70551 ($1,200 overcharge)',
+    '→ Flag: CPT 97161 billed twice on same date…',
+    '⚠ Billing error detected: duplicate — PT evaluation ($320 overcharge)',
+    '⚠ Billing error detected: unbundling — CMP panel split ($232 overcharge)',
+    '⚠ Billing error detected: upcoding — IV Acetaminophen markup ($440)',
+    '→ Scanning denial notice…',
+    '⚠ Denial found: CPT 70553 — "not medically necessary" (PR-234)',
+    '→ Checking ACA §2719 emergency service exemptions…',
+    '✓ Appeal ground: emergency service prior-auth exemption (STRONG)',
+    '✓ Appeal ground: No Surprises Act §2799A-1 (MODERATE)',
+    '→ Calculating deadlines…',
+    '⚠ Critical: Itemized bill request within 17 days',
+    '→ Appeal window: 168 days (August 28, 2026)',
+    '',
+    'Analysis complete. Billing errors: 4  |  Appeal grounds: 4  |  Deadlines: 3',
+  ];
+  for (const line of lines) {
+    appendStream(line + '\n');
+    await sleep(120);
+    setProgress(5 + lines.indexOf(line) * 2, 'Analyzing document…');
+  }
+  STATE.analysis = SAMPLE_ANALYSIS;
+  completeStep(1); activateStep(2);
+
+  // Step 2: Strategy
+  setStreamLabel('Building attack tree strategy…');
+  clearStream();
+  setProgress(40, 'Building strategy…');
+  const slines = [
+    '→ Processing 4 billing errors and 4 appeal grounds…',
+    '→ Constructing escalation graph…',
+    '→ Node: Request Itemized Bill [IMMEDIATE — ready]',
+    '→ Node: File Billing Dispute [IMMEDIATE — ready]',
+    '→ Node: Correct CPT Code [IMMEDIATE — ready]',
+    '→ Node: Get Physician Letter [THIS WEEK — ready]',
+    '→ Node: File Internal Appeal [THIS WEEK — ready]',
+    '→ Node: Appeal Deadline Aug 28 [THIS MONTH — ready]',
+    '→ Node: File External Review [THIS MONTH — blocked]',
+    '→ Node: State Insurance Complaint [THIS MONTH — optional]',
+    '→ Node: Potential Recovery $5,814 [outcome]',
+    '→ Drawing 10 dependency edges…',
+    '',
+    'Strategy complete. 9 nodes  |  10 edges  |  3 escalation paths',
+  ];
+  for (const line of slines) {
+    appendStream(line + '\n');
+    await sleep(150);
+    setProgress(40 + slines.indexOf(line) * 2, 'Building strategy…');
+  }
+  STATE.attackTree = SAMPLE_ATTACK_TREE;
+  completeStep(2); activateStep(3);
+
+  // Step 3: Draft initial document
+  setStreamLabel('Pre-generating primary appeal document…');
+  clearStream();
+  setProgress(75, 'Generating draft documents…');
+  const dlines = SAMPLE_DRAFT.split('\n').slice(0,20);
+  for (const line of dlines) {
+    appendStream(line + '\n');
+    await sleep(60);
+  }
+  appendStream('\n[Document ready — click "File Internal Appeal" node to view full draft]');
+  setProgress(100, 'Complete');
+  STATE.draftContent = SAMPLE_DRAFT;
+  completeStep(3);
+
+  await sleep(600);
+  populateWorkspace();
+  showView('workspace');
+}
+
+async function runLivePipeline(text) {
+  // Step 1: Analyze
+  activateStep(1);
+  setStreamLabel('Sending document to GPT-4o for analysis…');
+  setProgress(5, 'Analyzing document…');
+
+  const analysisRaw = await streamOpenAI(
+    [{ role:'user', content: ANALYZE_PROMPT + text }],
+    (chunk) => { appendStream(chunk); },
+    false
+  );
+  setProgress(38, 'Parsing analysis…');
+  let analysis;
+  try { analysis = JSON.parse(extractJSON(analysisRaw)); }
+  catch { throw new Error('Could not parse analysis response. Check API key and try again.'); }
+  STATE.analysis = analysis;
+  completeStep(1); activateStep(2);
+
+  // Step 2: Strategy
+  setStreamLabel('Building attack tree strategy…');
+  clearStream();
+  setProgress(42, 'Building strategy…');
+
+  const strategyRaw = await streamOpenAI(
+    [{ role:'user', content: STRATEGY_PROMPT + JSON.stringify(analysis, null, 2) }],
+    (chunk) => { appendStream(chunk); },
+    false
+  );
+  setProgress(78, 'Parsing strategy…');
+  let tree;
+  try { tree = JSON.parse(extractJSON(strategyRaw)); }
+  catch { throw new Error('Could not parse strategy response.'); }
+  STATE.attackTree = tree;
+  completeStep(2); activateStep(3);
+
+  // Step 3: Pre-generate first document node
+  const docNode = tree.nodes.find(n => n.documentType === 'appeal_letter') || tree.nodes.find(n => n.documentType);
+  if (docNode) {
+    setStreamLabel('Pre-generating primary appeal document…');
+    clearStream();
+    setProgress(82, 'Generating draft…');
+    const draftRaw = await streamOpenAI(
+      [{ role:'user', content: DRAFT_PROMPT + `Node: ${docNode.label}\nDescription: ${docNode.description}\nDocument type: ${docNode.documentType}\nCase analysis: ${JSON.stringify(analysis)}` }],
+      (chunk) => { appendStream(chunk); },
+      true
+    );
+    STATE.draftContent = draftRaw;
+    STATE.selectedNodeId = docNode.id;
+  }
+  setProgress(100, 'Complete');
+  completeStep(3);
+  await sleep(400);
+  populateWorkspace();
+  showView('workspace');
+}
+
+// ── OpenAI streaming call ────────────────────────────────────
+async function streamOpenAI(messages, onChunk, isText) {
+  if (STATE.abortController) STATE.abortController.abort();
+  STATE.abortController = new AbortController();
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+STATE.apiKey },
+    signal: STATE.abortController.signal,
+    body: JSON.stringify({ model:'gpt-4o', messages, stream:true, max_tokens:2500 })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err?.error?.message || `API error ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '', full = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream:true });
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const d = line.slice(6);
+      if (d === '[DONE]') continue;
+      try {
+        const delta = JSON.parse(d).choices?.[0]?.delta?.content || '';
+        full += delta;
+        if (onChunk) onChunk(delta);
+      } catch {}
+    }
+  }
+  return full;
+}
+
+function extractJSON(raw) {
+  const m = raw.match(/```json\s*([\s\S]*?)```/) || raw.match(/(\{[\s\S]*\})/);
+  return m ? m[1] : raw;
+}
+
+// ── Progress / step helpers ───────────────────────────────────
+function resetSteps() {
+  [1,2,3].forEach(i => {
+    const el = document.getElementById('step-'+i);
+    el.classList.remove('step-done','step-active');
+    el.querySelector('.step-dot').innerHTML = '';
+  });
+  clearStream();
+}
+function activateStep(n) {
+  document.getElementById('step-'+n).classList.add('step-active');
+}
+function completeStep(n) {
+  const el = document.getElementById('step-'+n);
+  el.classList.remove('step-active');
+  el.classList.add('step-done');
+  el.querySelector('.step-dot').innerHTML = '✓';
+}
+function setProgress(pct, label) {
+  document.getElementById('progress-bar').style.width = pct+'%';
+  document.getElementById('progress-label').textContent = label;
+  document.getElementById('progress-pct').textContent = pct+'%';
+}
+function setStreamLabel(t) { document.getElementById('stream-step-label').textContent = t; }
+let streamBuf = '';
+function appendStream(t) {
+  streamBuf += t;
+  const el = document.getElementById('stream-output');
+  el.textContent = streamBuf;
+  el.scrollTop = el.scrollHeight;
+}
+function clearStream() {
+  streamBuf = '';
+  document.getElementById('stream-output').textContent = '';
+}
+
+// ── Workspace population ─────────────────────────────────────
+function populateWorkspace() {
+  if (!STATE.analysis || !STATE.attackTree) return;
+  const a = STATE.analysis;
+
+  // Toolbar
+  document.getElementById('ws-case-id').textContent = '#ADV-' + Math.floor(2000+Math.random()*100);
+  document.getElementById('ws-denied-amt').textContent = a.deniedAmount + ' Denied';
+  const urgentDl = a.deadlines.find(d=>d.urgency==='critical'||d.urgency==='high');
+  document.getElementById('ws-deadline').textContent = urgentDl ? urgentDl.daysRemaining + ' days remaining' : 'See deadlines';
+  document.getElementById('ws-risk-level').textContent = a.riskLevel.toUpperCase() + ' RISK';
+  document.getElementById('ws-risk-level').className = 'px-2 py-0.5 text-white text-[9px] font-bold ' + (a.riskLevel==='critical'?'bg-[#7F1D1D]':'bg-[#B83A3A]');
+
+  // Nav case label
+  document.getElementById('nav-case-id').textContent = '#ADV | ' + (a.patientContext.split(',')[0] || 'Patient');
+
+  renderLeftRail(a);
+  renderAttackTree(STATE.attackTree);
+
+  // Pre-populate draft if we have one
+  if (STATE.draftContent && STATE.selectedNodeId) {
+    const node = STATE.attackTree.nodes.find(n=>n.id===STATE.selectedNodeId);
+    if (node) showDraft(node, STATE.draftContent);
+  }
+}
+
+function renderLeftRail(a) {
+  const container = document.getElementById('left-rail-content');
+  container.innerHTML = '';
+
+  // Case identity
+  const ident = el('section', 'stagger');
+  ident.innerHTML = `
+    <p class="text-[10px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-1">Case Identity</p>
+    <h2 class="font-serif text-2xl mb-4">${a.patientContext.split(',')[0] || 'Case'}</h2>
+    <div class="space-y-2.5 text-[11px]">
+      <div class="flex justify-between pb-2 border-b border-[#F3F3F3]"><span class="text-[#6B6B6B]">Risk Level</span><span class="font-bold text-[#B83A3A] uppercase">${a.riskLevel}</span></div>
+      <div class="flex justify-between pb-2 border-b border-[#F3F3F3]"><span class="text-[#6B6B6B]">Total Billed</span><span class="font-bold">${a.totalBilled}</span></div>
+      <div class="flex justify-between pb-2 border-b border-[#F3F3F3]"><span class="text-[#6B6B6B]">Overcharged</span><span class="font-bold text-[#B83A3A]">${a.totalOvercharged}</span></div>
+      <div class="flex justify-between"><span class="text-[#6B6B6B]">Denied</span><span class="font-bold text-[#B83A3A]">${a.deniedAmount}</span></div>
+    </div>
+    <div class="mt-4 p-3 bg-[#F9F8F6] border border-[#E8E4DF] text-[11px] leading-relaxed text-[#4A4A4A]">${a.summary}</div>`;
+  container.appendChild(ident);
+
+  // Deadlines
+  if (a.deadlines.length) {
+    const dlSec = el('section');
+    const urgColors = { critical:'bg-[#FEF2F2] border-[#FEE2E2] text-[#B83A3A]', high:'bg-[#FEF2F2] border-[#FEE2E2] text-[#B83A3A]', medium:'bg-[#FFFBEB] border-[#FEF3C7] text-[#D97706]', low:'bg-white border-[#E8E4DF] text-[#6B6B6B]' };
+    dlSec.innerHTML = `<p class="text-[10px] font-bold uppercase tracking-widest text-[#B83A3A] mb-3">Deadlines</p>` +
+      a.deadlines.map(d=>`<div class="mb-2 p-3 border ${urgColors[d.urgency]||'bg-white border-[#E8E4DF]'} ${d.urgency==='critical'?'deadline-pulse':''}"><p class="text-[9px] font-bold uppercase">${d.urgency}</p><p class="text-[11px] font-bold">${d.action}</p><p class="text-[10px] opacity-70 mt-0.5">${d.date}</p></div>`).join('');
+    container.appendChild(dlSec);
+  }
+
+  // Billing errors
+  if (a.billingErrors.length) {
+    const errSec = el('section');
+    errSec.innerHTML = `<p class="text-[10px] font-bold uppercase tracking-widest text-[#1E3A5F] mb-3">Billing Errors Found</p>` +
+      a.billingErrors.map(e=>`<div class="mb-2.5 p-3 bg-[#F9F8F6] border border-[#E8E4DF]"><p class="text-[9px] font-bold uppercase text-[#B83A3A] mb-0.5">${e.type.replace('_',' ')}</p><p class="text-[11px] font-bold">${e.cptCode||''}</p><p class="text-[10px] text-[#6B6B6B] leading-relaxed mt-0.5">${e.description.slice(0,80)}…</p><p class="text-[10px] font-bold text-[#1B5E3F] mt-1">Overcharge: ${e.estimatedOvercharge}</p></div>`).join('');
+    container.appendChild(errSec);
+  }
+
+  // Appeal grounds
+  if (a.appealGrounds.length) {
+    const apSec = el('section');
+    const strColors = { strong:'text-[#1B5E3F]', moderate:'text-[#D97706]', weak:'text-[#6B6B6B]' };
+    apSec.innerHTML = `<p class="text-[10px] font-bold uppercase tracking-widest text-[#1E3A5F] mb-3">Appeal Grounds</p>` +
+      a.appealGrounds.map(g=>`<div class="mb-2.5 p-3 bg-[#F9F8F6] border border-[#E8E4DF]"><div class="flex justify-between items-start mb-1"><p class="text-[11px] font-bold">${g.basis.replace('_',' ')}</p><span class="text-[9px] font-bold uppercase ${strColors[g.strength]||''}">${g.strength}</span></div>${g.regulation?`<p class="text-[9px] text-[#6B6B6B] font-mono mb-1">${g.regulation}</p>`:''}<p class="text-[10px] text-[#4A4A4A] leading-relaxed">${g.argument.slice(0,100)}…</p></div>`).join('');
+    container.appendChild(apSec);
+  }
+}
+
+// ── Attack tree rendering ────────────────────────────────────
+function renderAttackTree(tree) {
+  const nodesEl = document.getElementById('tree-nodes');
+  const svgEl   = document.getElementById('tree-svg');
+  nodesEl.innerHTML = '';
+  svgEl.innerHTML = '';
+
+  const NODE_W = 168, NODE_H = 90, COL_W = 230, ROW_H = 130, PAD_X = 60, PAD_Y = 60;
+  const typeCol = { action:0, document:1, deadline:1, escalation:2, outcome:3 };
+  const typeColor = {
+    action:    { border:'border-[#1B5E3F]',  accent:'#1B5E3F',  icon:'⤴' },
+    document:  { border:'border-[#C4A747]',  accent:'#C4A747',  icon:'📄' },
+    deadline:  { border:'border-[#B83A3A]',  accent:'#B83A3A',  icon:'⏰' },
+    escalation:{ border:'border-[#D97706]',  accent:'#D97706',  icon:'📈' },
+    outcome:   { border:'border-[#1E3A5F] border-dashed', accent:'#1E3A5F', icon:'🎯' }
+  };
+
+  // Assign columns
+  const colCounts = {};
+  tree.nodes.forEach(n => {
+    const col = typeCol[n.type] ?? 0;
+    colCounts[col] = (colCounts[col] || 0);
+    n._col = col;
+    n._colIdx = colCounts[col]++;
+  });
+
+  // Assign pixel positions
+  tree.nodes.forEach(n => {
+    n._x = PAD_X + n._col * COL_W;
+    n._y = PAD_Y + n._colIdx * ROW_H;
+  });
+
+  // Canvas size
+  const maxX = Math.max(...tree.nodes.map(n=>n._x)) + NODE_W + PAD_X;
+  const maxY = Math.max(...tree.nodes.map(n=>n._y)) + NODE_H + PAD_Y;
+  nodesEl.style.width  = maxX + 'px';
+  nodesEl.style.height = maxY + 'px';
+  svgEl.style.width    = maxX + 'px';
+  svgEl.style.height   = maxY + 'px';
+  svgEl.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
+
+  // Draw edges
+  const nodeMap = {};
+  tree.nodes.forEach(n => nodeMap[n.id] = n);
+  tree.edges.forEach((edge, i) => {
+    const src = nodeMap[edge.source], tgt = nodeMap[edge.target];
+    if (!src || !tgt) return;
+    const x1 = src._x + NODE_W, y1 = src._y + NODE_H/2;
+    const x2 = tgt._x,          y2 = tgt._y + NODE_H/2;
+    const mx = (x1+x2)/2;
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d', `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`);
+    path.setAttribute('stroke', edge.type==='fallback' ? '#B83A3A' : edge.type==='parallel' ? '#2563EB' : '#D1CDCA');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('stroke-dasharray', edge.type==='fallback' ? '4,3' : edge.type==='parallel' ? '2,2' : 'none');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('opacity', '0.7');
+    path.id = 'edge-'+edge.id;
+    svgEl.appendChild(path);
+
+    // Edge label
+    if (edge.label) {
+      const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+      text.setAttribute('x', mx); text.setAttribute('y', (y1+y2)/2 - 4);
+      text.setAttribute('text-anchor','middle'); text.setAttribute('font-size','8');
+      text.setAttribute('fill','#9B9B9B'); text.setAttribute('font-family','Inter,sans-serif');
+      text.setAttribute('font-weight','600');
+      text.textContent = edge.label;
+      svgEl.appendChild(text);
+    }
+  });
+
+  // Draw nodes
+  tree.nodes.forEach((node, idx) => {
+    const tc = typeColor[node.type] || typeColor.action;
+    const urgBg = node.urgency==='immediate' ? 'bg-white' : node.urgency==='this_week' ? 'bg-white' : 'bg-[#FDFCFB]';
+    const div = document.createElement('div');
+    div.id = 'node-'+node.id;
+    div.className = `tree-node absolute bg-white border ${tc.border} p-3 cursor-pointer ${node.type==='deadline'?'deadline-pulse':''} ${node.status==='blocked'?'opacity-60':''}`;
+    div.style.cssText = `width:${NODE_W}px; left:${node._x}px; top:${node._y}px; animation-delay:${idx*0.07}s`;
+    div.innerHTML = `
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="text-sm leading-none">${tc.icon}</span>
+        <span class="text-[8px] font-bold uppercase tracking-widest" style="color:${tc.accent}">${node.type}</span>
+      </div>
+      <p class="text-[10px] font-bold leading-snug mb-1">${node.label}</p>
+      <p class="text-[9px] text-[#6B6B6B] leading-snug hidden group-hover:block">${node.description.slice(0,60)}…</p>
+      <div class="flex items-center justify-between mt-1.5">
+        <span class="text-[8px] uppercase tracking-widest" style="color:${tc.accent}">${node.urgency.replace('_',' ')}</span>
+        <span class="text-[8px] uppercase text-[#9B9B9B]">${node.status}</span>
+      </div>`;
+    div.addEventListener('click', () => onNodeClick(node));
+    nodesEl.appendChild(div);
+  });
+}
+
+// ── Node click → draft ───────────────────────────────────────
+async function onNodeClick(node) {
+  // Select highlight
+  document.querySelectorAll('.tree-node').forEach(n=>n.classList.remove('selected'));
+  document.getElementById('node-'+node.id)?.classList.add('selected');
+  STATE.selectedNodeId = node.id;
+
+  if (STATE.riskMode) { triggerRiskCascade(node.id); return; }
+
+  document.getElementById('draft-title').textContent = node.label;
+  document.getElementById('draft-empty').classList.add('hidden');
+  const letter = document.getElementById('draft-letter');
+  letter.classList.remove('hidden');
+
+  // If it's a document node, generate/show draft
+  if (node.documentType || node.type === 'document') {
+    if (node.id === STATE.selectedNodeId && STATE.draftContent) {
+      showDraft(node, STATE.draftContent);
+    } else {
+      letter.innerHTML = `<div class="flex flex-col items-center justify-center h-48 gap-3"><div class="w-5 h-5 border-2 border-[#1E3A5F] border-t-transparent rounded-full" style="animation:spin 1s linear infinite"></div><p class="text-xs text-[#6B6B6B]">Generating ${node.documentType?.replace('_',' ')||'document'}…</p></div>`;
+      if (STATE.isSampleMode) {
+        await sleep(1200);
+        STATE.draftContent = SAMPLE_DRAFT;
+        showDraft(node, SAMPLE_DRAFT);
+      } else {
+        try {
+          const ctx = `Node: ${node.label}\nDescription: ${node.description}\nDocument type: ${node.documentType}\nCase analysis: ${JSON.stringify(STATE.analysis)}`;
+          let draft = '';
+          letter.innerHTML = `<pre class="text-[11px] leading-relaxed whitespace-pre-wrap font-sans stream-cursor" id="live-draft"></pre>`;
+          await streamOpenAI(
+            [{ role:'user', content: DRAFT_PROMPT + ctx }],
+            (chunk) => { draft += chunk; const el = document.getElementById('live-draft'); if(el) el.textContent = draft; },
+            true
+          );
+          const liveDraft = document.getElementById('live-draft');
+          if (liveDraft) liveDraft.classList.remove('stream-cursor');
+          STATE.draftContent = draft;
+        } catch(e) {
+          showDraft(node, SAMPLE_DRAFT + '\n\n[Fallback to sample — API error: '+e.message+']');
+        }
+      }
+    }
+  } else {
+    // Action / deadline / escalation node
+    letter.innerHTML = `
+      <div class="mb-4 p-3 border-l-2 border-[#1B5E3F] bg-[#F9F8F6]">
+        <p class="text-[9px] font-bold uppercase tracking-widest text-[#1B5E3F] mb-1">Node Description</p>
+        <p class="text-[11px] leading-relaxed text-[#2C2C2C]">${node.description}</p>
+      </div>
+      <div class="p-3 border border-[#E8E4DF] bg-white">
+        <p class="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-1">Status</p>
+        <p class="text-xs font-bold capitalize">${node.status} — ${node.urgency.replace('_',' ')}</p>
+      </div>
+      ${node.type==='deadline' ? `<div class="mt-3 p-3 bg-[#FEF2F2] border border-[#FEE2E2]"><p class="text-[9px] font-bold uppercase tracking-widest text-[#B83A3A] mb-1">Risk if missed</p><p class="text-[11px] text-[#7F1D1D] leading-relaxed">Missing this deadline may permanently close your escalation options. Act immediately.</p></div>` : ''}`;
+    const warn = document.getElementById('draft-warning');
+    warn.textContent = node.type==='deadline' ? '⚠ This deadline is time-sensitive.' : '';
+    warn.classList.toggle('hidden', node.type!=='deadline');
+  }
+}
+
+function showDraft(node, content) {
+  const letter = document.getElementById('draft-letter');
+  letter.innerHTML = `<pre class="text-[11px] leading-relaxed whitespace-pre-wrap font-sans">${content}</pre>`;
+}
+
+async function regenerateDraft() {
+  if (!STATE.selectedNodeId) return;
+  const node = STATE.attackTree?.nodes.find(n=>n.id===STATE.selectedNodeId);
+  if (node) { STATE.draftContent = null; await onNodeClick(node); }
+}
+
+function copyDraft() {
+  if (STATE.draftContent) { navigator.clipboard.writeText(STATE.draftContent).then(()=>{ const btn = document.getElementById('btn-copy-draft'); btn.textContent='✅'; setTimeout(()=>btn.textContent='📋',2000); }); }
+}
+
+// ── Risk cascade ─────────────────────────────────────────────
+function toggleRiskMode() {
+  STATE.riskMode = !STATE.riskMode;
+  const btn = document.getElementById('risk-cascade-btn');
+  document.querySelectorAll('.tree-node').forEach(n=>n.classList.remove('cascade'));
+  if (STATE.riskMode) {
+    btn.classList.add('text-[#B83A3A]','border-[#B83A3A]');
+    document.getElementById('tree-footer-hint').textContent = '⚠ Risk mode ON — click a node to see cascade';
+  } else {
+    btn.classList.remove('text-[#B83A3A]','border-[#B83A3A]');
+    document.getElementById('tree-footer-hint').textContent = 'Click a node to open drafting environment →';
+  }
+}
+
+function triggerRiskCascade(startId) {
+  if (!STATE.attackTree) return;
+  document.querySelectorAll('.tree-node').forEach(n=>n.classList.remove('cascade'));
+  // BFS to find downstream nodes
+  const edges = STATE.attackTree.edges;
+  const visited = new Set([startId]);
+  const queue = [startId];
+  let delay = 0;
+  while (queue.length) {
+    const cur = queue.shift();
+    setTimeout(() => {
+      const el = document.getElementById('node-'+cur);
+      if (el) el.classList.add('cascade');
+    }, delay);
+    delay += 200;
+    edges.filter(e=>e.source===cur).forEach(e => {
+      if (!visited.has(e.target)) { visited.add(e.target); queue.push(e.target); }
+    });
+  }
+}
+
+// ── Utility ──────────────────────────────────────────────────
+function el(tag, cls='') { const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+// ── Init ─────────────────────────────────────────────────────
+document.getElementById('nav-intake').classList.add('nav-active');
+</script>
+</body>
+</html>
