@@ -1,18 +1,89 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Circle, FileCheck, Mail, Printer } from "lucide-react";
 import { AdvocateNav } from "@/components/advocate-nav";
 import { BrandLockup } from "@/components/brand-lockup";
+import {
+  createFallbackCaseSession,
+  loadCaseSession,
+  updateCaseSession,
+  type CaseSessionState,
+} from "@/lib/client/case-session";
+import { syncCaseSessionRecord } from "@/lib/client/run-case-pipeline";
+
+function createTrackingId() {
+  return `ADV-TXN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+}
 
 export default function ConfirmationPage() {
+  const router = useRouter();
+  const [caseState, setCaseState] = useState<CaseSessionState | null>(null);
+  const [method, setMethod] = useState<"fax" | "mail">("fax");
+  const [email, setEmail] = useState("case-review@example.com");
+  const [smsOptIn, setSmsOptIn] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const current = loadCaseSession() || createFallbackCaseSession();
+    setCaseState(current);
+    setMethod(current.submission.method);
+    setEmail(current.submission.confirmationEmail);
+    setSmsOptIn(current.submission.smsOptIn);
+  }, []);
+
+  const resolved = caseState || createFallbackCaseSession();
+  const attachmentCount = useMemo(() => resolved.vaultDocuments.length, [resolved.vaultDocuments.length]);
+
+  function isValidEmail(value: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
+  async function transmitPacket() {
+    if (!isValidEmail(email)) {
+      setNotice("Enter a valid confirmation email before transmitting the packet.");
+      return;
+    }
+
+    const next = updateCaseSession((current) => ({
+      ...current,
+      submission: {
+        ...current.submission,
+        method,
+        status: "transmitted",
+        recipient: current.structuredFacts.insurer || "Insurer appeals department",
+        confirmationEmail: email,
+        smsOptIn,
+        submittedAt: new Date().toISOString(),
+        trackingId: createTrackingId(),
+      },
+      activity: [
+        {
+          id: `activity-${Date.now()}`,
+          label: "Appeal packet transmitted",
+          body: `Packet transmitted via ${method === "fax" ? "digital fax" : "certified mail"} to ${current.structuredFacts.insurer || "the insurer"}.`,
+          timestamp: new Date().toISOString(),
+          type: "submission",
+        },
+        ...current.activity,
+      ],
+    }));
+
+    const synced = await syncCaseSessionRecord(next).catch(() => next);
+    setCaseState(synced);
+    setNotice(`Packet transmitted via ${method === "fax" ? "digital fax" : "certified mail"}.`);
+    router.push("/status");
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[#FDFCFB] text-[#1E3A5F]">
       <AdvocateNav
         activeItem="workspace"
         showCaseContext
-        caseId="#ADV-2047"
-        patientName="Marina Rodriguez"
+        caseId={resolved.structuredFacts.claimNumber || "#ADV-2047"}
+        patientName={resolved.structuredFacts.patientName || "Case review"}
         workspaceHref="/workspace"
         methodologyHref="/#methodology"
         evidenceHref="/evidence"
@@ -23,30 +94,49 @@ export default function ConfirmationPage() {
       <main className="flex-1 max-w-[1400px] mx-auto w-full px-8 py-10">
         <header className="mb-10">
           <div className="flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-2">
-            <Link href="/workspace" className="hover:text-[#1E3A5F]">Workspace</Link>
+            <Link href="/workspace" className="hover:text-[#1E3A5F]">
+              Workspace
+            </Link>
             <span>/</span>
             <span className="text-[#1E3A5F]">Submission Confirmation</span>
           </div>
           <h1 className="font-serif text-4xl text-[#1E3A5F]">Finalize Submission</h1>
-          <p className="text-sm text-[#6B6B6B] mt-2 font-light">Review your appeal packet and confirm the delivery channel to the insurer.</p>
+          <p className="text-sm text-[#6B6B6B] mt-2 font-light">
+            Review your appeal packet and confirm the delivery channel to the insurer.
+          </p>
         </header>
+
+        {notice ? (
+          <div className="bg-white border-subtle p-4 mb-8 text-[11px] font-medium">{notice}</div>
+        ) : null}
 
         <section className="bg-white border-subtle p-6 mb-8 flex items-center justify-between">
           <div className="flex items-center space-x-8">
             <div className="flex items-center space-x-3">
-              <FileCheck className="text-2xl text-[#1B5E3F] h-6 w-6" />
+              <FileCheck className="text-[#1B5E3F] h-6 w-6" />
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Packet Content</span>
-                <span className="text-xs font-semibold">Internal Appeal Letter + 4 Evidence Attachments</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">
+                  Packet Content
+                </span>
+                <span className="text-xs font-semibold">
+                  {resolved.draft.title} + {attachmentCount} Evidence Attachment(s)
+                </span>
               </div>
             </div>
             <div className="h-10 w-px bg-[#E8E4DF]" />
             <div className="flex flex-col">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Recipient</span>
-              <span className="text-xs font-semibold">Anthem Blue Cross | Grievances & Appeals Dept</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">
+                Recipient
+              </span>
+              <span className="text-xs font-semibold">
+                {resolved.structuredFacts.insurer || "Insurer"} | Appeals Department
+              </span>
             </div>
           </div>
-          <Link href="/draft" className="text-[10px] font-bold uppercase tracking-widest text-[#1E3A5F] border-b border-[#1E3A5F] pb-0.5 hover:opacity-70">
+          <Link
+            href="/draft"
+            className="text-[10px] font-bold uppercase tracking-widest text-[#1E3A5F] border-b border-[#1E3A5F] pb-0.5 hover:opacity-70"
+          >
             Review Documents
           </Link>
         </section>
@@ -54,30 +144,70 @@ export default function ConfirmationPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           <div className="lg:col-span-7 flex flex-col gap-8">
             <div className="bg-white border-subtle p-8">
-              <h2 className="text-xs font-bold uppercase tracking-[0.2em] mb-6 text-[#1E3A5F]">Select Submission Method</h2>
+              <h2 className="text-xs font-bold uppercase tracking-[0.2em] mb-6 text-[#1E3A5F]">
+                Select Submission Method
+              </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className="relative flex flex-col p-5 border-2 border-[#1E3A5F] bg-[#FDFCFB] cursor-pointer group">
-                  <input type="radio" name="submission_method" className="hidden" defaultChecked />
+                <label
+                  className={`relative flex flex-col p-5 border-2 ${
+                    method === "fax" ? "border-[#1E3A5F] bg-[#FDFCFB]" : "border-[#E8E4DF] bg-white"
+                  } cursor-pointer group`}
+                >
+                  <input
+                    type="radio"
+                    name="submission_method"
+                    className="hidden"
+                    checked={method === "fax"}
+                    onChange={() => setMethod("fax")}
+                  />
                   <div className="flex justify-between items-start mb-4">
-                    <Printer className="text-2xl text-[#1E3A5F] h-6 w-6" />
-                    <div className="w-4 h-4 rounded-full border-4 border-[#1E3A5F] bg-white" />
+                    <Printer className="text-[#1E3A5F] h-6 w-6" />
+                    <div
+                      className={`w-4 h-4 rounded-full ${
+                        method === "fax"
+                          ? "border-4 border-[#1E3A5F] bg-white"
+                          : "border border-[#E8E4DF] bg-white"
+                      }`}
+                    />
                   </div>
                   <span className="text-sm font-bold">Digital Fax</span>
-                  <p className="text-[11px] text-[#6B6B6B] mt-1 leading-relaxed">Secure transmission to (800) 555-0199. Near-instant confirmation receipt.</p>
+                  <p className="text-[11px] text-[#6B6B6B] mt-1 leading-relaxed">
+                    Secure transmission to insurer appeals intake. Near-instant confirmation receipt.
+                  </p>
                   <div className="mt-4 pt-4 border-t border-[#E8E4DF] flex justify-between">
-                    <span className="text-[10px] font-bold uppercase text-[#1B5E3F]">Recommended</span>
+                    <span className="text-[10px] font-bold uppercase text-[#1B5E3F]">
+                      Recommended
+                    </span>
                     <span className="text-[10px] font-bold uppercase text-[#6B6B6B]">Free</span>
                   </div>
                 </label>
 
-                <label className="relative flex flex-col p-5 border border-[#E8E4DF] bg-white hover:border-[#1E3A5F] transition-colors cursor-pointer group">
-                  <input type="radio" name="submission_method" className="hidden" />
+                <label
+                  className={`relative flex flex-col p-5 border ${
+                    method === "mail" ? "border-[#1E3A5F]" : "border-[#E8E4DF]"
+                  } bg-white hover:border-[#1E3A5F] transition-colors cursor-pointer group`}
+                >
+                  <input
+                    type="radio"
+                    name="submission_method"
+                    className="hidden"
+                    checked={method === "mail"}
+                    onChange={() => setMethod("mail")}
+                  />
                   <div className="flex justify-between items-start mb-4">
-                    <Mail className="text-2xl text-[#6B6B6B] group-hover:text-[#1E3A5F] h-6 w-6" />
-                    <div className="w-4 h-4 rounded-full border border-[#E8E4DF] bg-white" />
+                    <Mail className="text-[#6B6B6B] group-hover:text-[#1E3A5F] h-6 w-6" />
+                    <div
+                      className={`w-4 h-4 rounded-full ${
+                        method === "mail"
+                          ? "border-4 border-[#1E3A5F] bg-white"
+                          : "border border-[#E8E4DF] bg-white"
+                      }`}
+                    />
                   </div>
                   <span className="text-sm font-bold">USPS Certified Mail</span>
-                  <p className="text-[11px] text-[#6B6B6B] mt-1 leading-relaxed">Physical delivery with signature tracking. 3-5 business days.</p>
+                  <p className="text-[11px] text-[#6B6B6B] mt-1 leading-relaxed">
+                    Physical delivery with signature tracking. 3-5 business days.
+                  </p>
                   <div className="mt-4 pt-4 border-t border-[#E8E4DF] flex justify-between">
                     <span className="text-[10px] font-bold uppercase text-[#6B6B6B]">Priority</span>
                     <span className="text-[10px] font-bold uppercase text-[#6B6B6B]">$14.50 Fee</span>
@@ -87,35 +217,60 @@ export default function ConfirmationPage() {
             </div>
 
             <div className="bg-white border-subtle p-8">
-              <h2 className="text-xs font-bold uppercase tracking-[0.2em] mb-6 text-[#1E3A5F]">Verification & Notifications</h2>
+              <h2 className="text-xs font-bold uppercase tracking-[0.2em] mb-6 text-[#1E3A5F]">
+                Verification & Notifications
+              </h2>
               <div className="space-y-4">
                 <div className="flex flex-col">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1.5">Confirmation Email</label>
-                  <input type="email" defaultValue="marina.rodriguez@example.com" className="bg-[#F9F8F6] border-subtle p-3 text-xs focus:ring-1 focus:ring-[#1E3A5F] outline-none" />
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1.5">
+                    Confirmation Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    className="bg-[#F9F8F6] border-subtle p-3 text-xs focus:ring-1 focus:ring-[#1E3A5F] outline-none"
+                  />
                 </div>
                 <div className="flex items-center space-x-3 mt-4">
-                  <input type="checkbox" id="sms-notif" className="w-4 h-4 border-[#E8E4DF] text-[#1E3A5F]" defaultChecked />
-                  <label htmlFor="sms-notif" className="text-[11px] text-[#4A4A4A]">Send SMS status updates to (555) 012-3456</label>
+                  <input
+                    type="checkbox"
+                    id="sms-notif"
+                    className="w-4 h-4 border-[#E8E4DF] text-[#1E3A5F]"
+                    checked={smsOptIn}
+                    onChange={(event) => setSmsOptIn(event.target.checked)}
+                  />
+                  <label htmlFor="sms-notif" className="text-[11px] text-[#4A4A4A]">
+                    Send SMS status updates to the stored case contact
+                  </label>
                 </div>
               </div>
             </div>
 
             <div className="bg-[#FEF2F2] border border-[#FEE2E2] p-5 flex items-start space-x-4">
-              <AlertTriangle className="text-xl text-[#B83A3A] mt-0.5 h-5 w-5" />
+              <AlertTriangle className="text-[#B83A3A] mt-0.5 h-5 w-5" />
               <div className="flex flex-col">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-[#B83A3A] mb-1">Institutional Warning</span>
+                <span className="text-[11px] font-bold uppercase tracking-widest text-[#B83A3A] mb-1">
+                  Institutional Warning
+                </span>
                 <p className="text-[11px] leading-relaxed text-[#7F1D1D]">
-                  Once this appeal is transmitted to the insurer, no further modifications can be made to the claim packet
-                  through this interface. Ensure all evidence and clinical rationale are accurate before proceeding.
+                  Once this appeal is transmitted, the packet in this session becomes the current
+                  filing record. Review the draft and evidence attachments before proceeding.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center space-x-4 pt-4">
-              <Link href="/status" className="flex-1 bg-[#1E3A5F] text-white py-4 px-6 text-[11px] font-bold tracking-[0.2em] uppercase hover:bg-[#1B5E3F] transition-all text-center">
+              <button
+                onClick={() => void transmitPacket()}
+                className="flex-1 bg-[#1E3A5F] text-white py-4 px-6 text-[11px] font-bold tracking-[0.2em] uppercase hover:bg-[#1B5E3F] transition-all text-center"
+              >
                 Transmit Appeal Packet
-              </Link>
-              <Link href="/workspace" className="bg-white border border-[#E8E4DF] text-[#6B6B6B] py-4 px-6 text-[11px] font-bold tracking-[0.2em] uppercase hover:bg-gray-50 transition-all">
+              </button>
+              <Link
+                href="/workspace"
+                className="bg-white border border-[#E8E4DF] text-[#6B6B6B] py-4 px-6 text-[11px] font-bold tracking-[0.2em] uppercase hover:bg-gray-50 transition-all"
+              >
                 Return to Workspace
               </Link>
             </div>
@@ -124,26 +279,36 @@ export default function ConfirmationPage() {
           <div className="lg:col-span-5">
             <div className="bg-[#F9F8F6] border-subtle p-8 sticky top-24">
               <div className="flex items-center justify-between mb-8">
-                <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-[#1E3A5F]">Delivery Tracker</h2>
-                <span className="px-2 py-1 bg-white border border-[#E8E4DF] text-[9px] font-bold uppercase tracking-wider">Pending Transaction</span>
+                <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-[#1E3A5F]">
+                  Delivery Tracker
+                </h2>
+                <span className="px-2 py-1 bg-white border border-[#E8E4DF] text-[9px] font-bold uppercase tracking-wider">
+                  {resolved.submission.status === "transmitted" ? "Ready" : "Pending Transaction"}
+                </span>
               </div>
 
               <div className="relative space-y-10 pl-2">
                 <div className="status-line" />
                 <div className="relative flex items-start space-x-6 z-10">
                   <div className="w-4 h-4 rounded-full bg-[#1E3A5F] flex items-center justify-center ring-4 ring-white">
-                    <Circle className="text-[6px] text-white h-1.5 w-1.5 fill-white" />
+                    <Circle className="text-white h-1.5 w-1.5 fill-white" />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[11px] font-bold uppercase text-[#1E3A5F]">Awaiting Confirmation</span>
-                    <span className="text-[10px] text-[#6B6B6B]">Verification of case assets and insurer routing.</span>
-                    <span className="text-[9px] font-medium text-[#1E3A5F] mt-1">CURRENT STEP</span>
+                    <span className="text-[11px] font-bold uppercase text-[#1E3A5F]">
+                      Awaiting Confirmation
+                    </span>
+                    <span className="text-[10px] text-[#6B6B6B]">
+                      Verification of case assets and insurer routing.
+                    </span>
+                    <span className="text-[9px] font-medium text-[#1E3A5F] mt-1">
+                      CURRENT STEP
+                    </span>
                   </div>
                 </div>
 
                 {[
-                  ["Transmission Sent", "Packet dispatched via secure digital fax channel."],
-                  ["Insurer Acknowledged", "Receipt verification from Anthem routing system."],
+                  ["Transmission Sent", "Packet dispatched through the selected delivery channel."],
+                  ["Insurer Acknowledged", "Receipt verification from insurer routing system."],
                   ["Proof of Delivery", "Institutional confirmation log generated."],
                 ].map(([title, body]) => (
                   <div key={title} className="relative flex items-start space-x-6 z-10">
@@ -158,22 +323,35 @@ export default function ConfirmationPage() {
 
               <div className="mt-12 bg-white border border-[#E8E4DF] p-6 space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Est. Delivery Date</span>
-                  <span className="text-xs font-semibold">Today, March 16, 2024</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">
+                    Selected Method
+                  </span>
+                  <span className="text-xs font-semibold">
+                    {method === "fax" ? "Digital Fax" : "Certified Mail"}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Submission SLA</span>
-                  <span className="text-xs font-semibold text-[#1B5E3F]">&lt; 2 Hours</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">
+                    Submission SLA
+                  </span>
+                  <span className="text-xs font-semibold text-[#1B5E3F]">
+                    {method === "fax" ? "< 2 Hours" : "3-5 Days"}
+                  </span>
                 </div>
                 <div className="pt-4 border-t border-[#F3F3F3] flex justify-between items-center">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Tracking ID</span>
-                  <span className="text-[10px] font-mono text-[#1E3A5F]">ADV-TXN-99827-BC</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">
+                    Tracking ID
+                  </span>
+                  <span className="text-[10px] font-mono text-[#1E3A5F]">
+                    {resolved.submission.trackingId}
+                  </span>
                 </div>
               </div>
 
               <div className="mt-8">
                 <p className="text-[10px] leading-relaxed text-[#6B6B6B] italic font-light">
-                  Delivery tracking is integrated with regulatory oversight systems to ensure insurer compliance with response timelines.
+                  Delivery tracking is session-backed. Once transmitted, the status page will use the
+                  stored tracking metadata and activity log.
                 </p>
               </div>
             </div>
@@ -185,16 +363,6 @@ export default function ConfirmationPage() {
         <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-center">
           <div className="mb-6 md:mb-0">
             <BrandLockup width={540} height={129} imageClassName="h-[66px] w-auto" />
-          </div>
-          <div className="flex space-x-12">
-            <div className="flex flex-col">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-2">Navigation</span>
-              <div className="flex space-x-6 text-[10px] font-medium">
-                <Link href="/dashboard" className="hover:text-[#1E3A5F]">Dashboard</Link>
-                <Link href="/evidence" className="hover:text-[#1E3A5F]">Evidence</Link>
-                <Link href="/status" className="hover:text-[#1E3A5F]">Support</Link>
-              </div>
-            </div>
           </div>
         </div>
       </footer>

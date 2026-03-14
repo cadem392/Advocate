@@ -31,6 +31,11 @@ interface AdvocateNavProps {
 const activeClass = "text-[#1E3A5F] border-b-2 border-[#1E3A5F] pb-1";
 const inactiveClass = "hover:text-[#1B5E3F] transition-colors";
 
+function truncateValue(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trim()}...`;
+}
+
 function splitHref(href: string) {
   const [pathWithHash] = href.split("?");
   const [path, hash] = pathWithHash.split("#");
@@ -55,6 +60,8 @@ export function AdvocateNav({
   exportLabel = "Export Case Packet",
 }: AdvocateNavProps) {
   const pathname = usePathname();
+  const safeCaseId = truncateValue(caseId, 24);
+  const safePatientName = truncateValue(patientName, 24);
 
   function handleSameRouteNavigation(event: MouseEvent<HTMLAnchorElement>, href: string) {
     const currentPath = pathname || "/";
@@ -97,32 +104,32 @@ export function AdvocateNav({
 
   return (
     <nav className="sticky top-0 z-[100] isolate border-b border-[#E8E4DF] bg-[#FDFCFB] px-8 py-2 pointer-events-auto">
-      <div className="mx-auto flex max-w-[1536px] items-center justify-between gap-8">
-        <div className="flex min-w-0 items-center gap-10">
+      <div className="mx-auto grid max-w-[1536px] grid-cols-[auto_1fr_auto] items-center gap-8">
+        <div className="flex min-w-0 items-center">
           <Link
             href={homeHref}
             id="nav-logo"
             onClick={(event) => handleSameRouteNavigation(event, homeHref)}
             className="relative z-[1] flex shrink-0 items-center pointer-events-auto"
           >
-            <BrandLockup width={560} height={134} priority imageClassName="h-[68px] w-auto" />
+            <BrandLockup width={460} height={110} priority imageClassName="h-[56px] w-auto" />
           </Link>
-
-          <div className="hidden min-w-0 flex-wrap items-center gap-x-8 gap-y-2 text-[11px] font-bold uppercase tracking-widest text-[#4A4A4A] lg:flex">
-            {renderNavLink("Intake", intakeHref, "nav-intake", activeItem === "intake")}
-            {renderNavLink("Workspace", workspaceHref, "nav-workspace", activeItem === "workspace" || activeItem === "dashboard")}
-            {renderNavLink("Methodology", methodologyHref, "nav-methodology", activeItem === "methodology")}
-            {renderNavLink("Evidence", evidenceHref, "nav-evidence", activeItem === "evidence")}
-            {renderNavLink("Support", supportHref, "nav-support", activeItem === "support")}
-          </div>
         </div>
 
-        <div className="flex shrink-0 items-center space-x-4">
+        <div className="hidden min-w-0 items-center justify-center gap-x-8 text-[11px] font-bold uppercase tracking-widest text-[#4A4A4A] lg:flex">
+          {renderNavLink("Intake", intakeHref, "nav-intake", activeItem === "intake")}
+          {renderNavLink("Workspace", workspaceHref, "nav-workspace", activeItem === "workspace" || activeItem === "dashboard")}
+          {renderNavLink("Methodology", methodologyHref, "nav-methodology", activeItem === "methodology")}
+          {renderNavLink("Evidence", evidenceHref, "nav-evidence", activeItem === "evidence")}
+          {renderNavLink("Support", supportHref, "nav-support", activeItem === "support")}
+        </div>
+
+        <div className="flex shrink-0 items-center justify-end space-x-4">
           {showCaseContext ? (
-            <div className="flex flex-col text-right mr-4">
+            <div className="mr-2 flex max-w-[280px] flex-col text-right">
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Current Case</span>
-              <span className="text-xs font-semibold">
-                {caseId} | {patientName}
+              <span className="truncate text-xs font-semibold">
+                {safeCaseId} | {safePatientName}
               </span>
             </div>
           ) : null}

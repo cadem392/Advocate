@@ -158,9 +158,12 @@ export default function DashboardPage() {
                 >
                   {item.primaryActionLabel}
                 </Link>
-                <button className={`p-3 bg-white border transition-all ${item.secondaryBorder}`}>
+                <Link
+                  href="/evidence"
+                  className={`p-3 bg-white border transition-all ${item.secondaryBorder} flex items-center justify-center`}
+                >
                   <Upload className="text-sm h-4 w-4" />
-                </button>
+                </Link>
               </div>
             </div>
           ))}

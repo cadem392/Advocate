@@ -9,19 +9,20 @@ interface AttackTreeCanvasProps {
   onNodeClick: (node: AttackTreeNode) => void;
 }
 
-const NODE_W = 168;
-const NODE_H = 90;
-const COL_W  = 230;
-const ROW_H  = 130;
-const PAD_X  = 60;
-const PAD_Y  = 60;
+const NODE_W = 196;
+const NODE_H = 106;
+const COL_GAP = 52;
+const ROW_GAP = 92;
+const PAD_X = 60;
+const PAD_Y = 36;
 
-const typeCol: Record<string, number> = {
-  action:     0,
-  document:   1,
-  deadline:   1,
-  escalation: 2,
-  outcome:    3,
+const typeRow: Record<string, number> = {
+  action: 0,
+  evidence: 1,
+  deadline: 1,
+  document: 2,
+  escalation: 3,
+  outcome: 4,
 };
 
 const typeColor: Record<string, { border: string; accent: string; icon: string }> = {
@@ -33,18 +34,34 @@ const typeColor: Record<string, { border: string; accent: string; icon: string }
 };
 
 function layoutNodes(tree: AttackTree) {
-  const colCounts: Record<number, number> = {};
-  return tree.nodes.map((n) => {
-    const col = typeCol[n.type] ?? 0;
-    if (colCounts[col] === undefined) colCounts[col] = 0;
-    const colIdx = colCounts[col]++;
-    return {
-      ...n,
-      _col:    col,
-      _colIdx: colIdx,
-      _x:      PAD_X + col * COL_W,
-      _y:      PAD_Y + colIdx * ROW_H,
-    };
+  const rows = new Map<number, AttackTreeNode[]>();
+
+  tree.nodes.forEach((node) => {
+    const row = typeRow[node.type] ?? 0;
+    const bucket = rows.get(row) || [];
+    bucket.push(node);
+    rows.set(row, bucket);
+  });
+
+  const rowKeys = Array.from(rows.keys()).sort((left, right) => left - right);
+  const maxColumns = Math.max(...Array.from(rows.values()).map((nodes) => nodes.length), 1);
+  const width = Math.max(
+    720,
+    PAD_X * 2 + maxColumns * NODE_W + Math.max(0, maxColumns - 1) * COL_GAP
+  );
+
+  return rowKeys.flatMap((row) => {
+    const nodes = rows.get(row) || [];
+    const rowWidth = nodes.length * NODE_W + Math.max(0, nodes.length - 1) * COL_GAP;
+    const startX = (width - rowWidth) / 2;
+
+    return nodes.map((node, index) => ({
+      ...node,
+      _col: index,
+      _colIdx: row,
+      _x: startX + index * (NODE_W + COL_GAP),
+      _y: PAD_Y + row * (NODE_H + ROW_GAP),
+    }));
   });
 }
 
@@ -77,11 +94,11 @@ export function AttackTreeCanvas({
           const src = nodeMap[edge.source];
           const tgt = nodeMap[edge.target];
           if (!src || !tgt) return null;
-          const x1 = src._x + NODE_W;
-          const y1 = src._y + NODE_H / 2;
-          const x2 = tgt._x;
-          const y2 = tgt._y + NODE_H / 2;
-          const mx = (x1 + x2) / 2;
+          const x1 = src._x + NODE_W / 2;
+          const y1 = src._y + NODE_H;
+          const x2 = tgt._x + NODE_W / 2;
+          const y2 = tgt._y;
+          const my = (y1 + y2) / 2;
           const stroke =
             edge.type === "fallback" ? "#B83A3A" :
             edge.type === "parallel" ? "#2563EB" : "#D1CDCA";
@@ -91,7 +108,7 @@ export function AttackTreeCanvas({
           return (
             <g key={edge.id ?? `${edge.source}-${edge.target}`}>
               <path
-                d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`}
+                d={`M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`}
                 stroke={stroke}
                 strokeWidth="1.5"
                 strokeDasharray={dash}
@@ -100,8 +117,8 @@ export function AttackTreeCanvas({
               />
               {edge.label && (
                 <text
-                  x={mx}
-                  y={(y1 + y2) / 2 - 4}
+                  x={(x1 + x2) / 2}
+                  y={my - 6}
                   textAnchor="middle"
                   fontSize={8}
                   fill="#9B9B9B"
@@ -126,7 +143,7 @@ export function AttackTreeCanvas({
             key={node.id ?? idx}
             id={`node-${node.id}`}
             className={[
-              "tree-node absolute bg-white border p-3 cursor-pointer",
+              "tree-node absolute bg-white border p-3 cursor-pointer text-left",
               tc.border,
               node.type === "deadline" ? "deadline-pulse" : "",
               isBlocked ? "opacity-60" : "",
