@@ -1,5 +1,15 @@
 // Server-side OpenAI helper (fetch-based, no SDK dependency issues)
 
+const PROMPT_INJECTION_PATTERNS = [
+  /ignore\s+previous\s+instructions/gi,
+  /ignore\s+all\s+prior\s+instructions/gi,
+  /^\s*system\s*:/gim,
+  /^\s*assistant\s*:/gim,
+  /^\s*developer\s*:/gim,
+  /^\s*user\s*:/gim,
+  /you\s+are\s+now/gi,
+];
+
 export function extractJSON(raw: string): string {
   // Bug fix: Handle empty/null input and validate extracted JSON exists
   if (!raw || typeof raw !== "string") {
@@ -11,6 +21,15 @@ export function extractJSON(raw: string): string {
     throw new Error("extractJSON: No JSON content found in response");
   }
   return extracted;
+}
+
+export function sanitizePromptInput(raw: string): string {
+  let sanitized = raw;
+  // Fix 9: strip obvious prompt-injection markers before user text enters prompts.
+  for (const pattern of PROMPT_INJECTION_PATTERNS) {
+    sanitized = sanitized.replace(pattern, "");
+  }
+  return sanitized.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 export async function callOpenAI(

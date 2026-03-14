@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { ValidationError } from "@/lib/server/request-validation";
 
 const execFileAsync = promisify(execFile);
 
@@ -162,8 +163,12 @@ export async function ingestFile(file: File): Promise<EvidenceIngestionResult> {
       extractedText = extractPdfText(buffer);
     }
     ingestionStatus = extractedText ? "parsed_pdf" : "metadata_only";
-    if (!extractedText) {
-      warnings.push("PDF text extraction found no readable text. OCR is not enabled yet.");
+    if (extractedText.length < 50) {
+      // Fix 4: stop on unreadable PDFs instead of passing empty or noisy text through the pipeline.
+      throw new ValidationError(
+        "We couldn't extract text from this PDF. Try copy-pasting the content as text instead.",
+        422
+      );
     }
   } else {
     warnings.push("This file type is stored with metadata only. OCR/office parsing is not enabled yet.");

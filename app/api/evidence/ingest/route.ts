@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ingestFile } from "@/lib/server/file-ingestion";
+import { ValidationError } from "@/lib/server/request-validation";
+import { applyRateLimit } from "@/lib/server/rate-limit";
 
 export async function POST(request: NextRequest) {
+  const limited = applyRateLimit(request);
+  if (limited) return limited;
+
   try {
     const formData = await request.formData();
     const uploaded = formData.get("file");
@@ -19,7 +24,7 @@ export async function POST(request: NextRequest) {
         error:
           error instanceof Error ? error.message : "Failed to ingest evidence file",
       },
-      { status: 500 }
+      { status: error instanceof ValidationError ? error.status : 500 }
     );
   }
 }

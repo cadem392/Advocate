@@ -14,10 +14,6 @@ import {
 } from "@/lib/client/case-session";
 import { syncCaseSessionRecord } from "@/lib/client/run-case-pipeline";
 
-function createTrackingId() {
-  return `ADV-TXN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-}
-
 export default function ConfirmationPage() {
   const router = useRouter();
   const [caseState, setCaseState] = useState<CaseSessionState | null>(null);
@@ -41,9 +37,9 @@ export default function ConfirmationPage() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   }
 
-  async function transmitPacket() {
+  async function exportPacketLocally() {
     if (!isValidEmail(email)) {
-      setNotice("Enter a valid confirmation email before transmitting the packet.");
+      setNotice("Enter a valid confirmation email before exporting the packet.");
       return;
     }
 
@@ -52,18 +48,21 @@ export default function ConfirmationPage() {
       submission: {
         ...current.submission,
         method,
-        status: "transmitted",
-        recipient: current.structuredFacts.insurer || "Insurer appeals department",
+        status: "exported",
+        recipient:
+          current.structuredFacts.insurer && current.structuredFacts.insurer !== "unknown"
+            ? current.structuredFacts.insurer
+            : "Insurer appeals department",
         confirmationEmail: email,
         smsOptIn,
         submittedAt: new Date().toISOString(),
-        trackingId: createTrackingId(),
       },
       activity: [
         {
           id: `activity-${Date.now()}`,
-          label: "Appeal packet transmitted",
-          body: `Packet transmitted via ${method === "fax" ? "digital fax" : "certified mail"} to ${current.structuredFacts.insurer || "the insurer"}.`,
+          // Fix 6: record a local export event instead of implying a real insurer submission occurred.
+          label: "Appeal packet exported locally",
+          body: `Packet prepared for local ${method === "fax" ? "fax-ready export" : "mail-ready export"} review. No insurer submission was sent.`,
           timestamp: new Date().toISOString(),
           type: "submission",
         },
@@ -73,7 +72,7 @@ export default function ConfirmationPage() {
 
     const synced = await syncCaseSessionRecord(next).catch(() => next);
     setCaseState(synced);
-    setNotice(`Packet transmitted via ${method === "fax" ? "digital fax" : "certified mail"}.`);
+    setNotice(`Packet prepared for local ${method === "fax" ? "fax-ready export" : "mail-ready export"}.`);
     router.push("/status");
   }
 
@@ -98,11 +97,11 @@ export default function ConfirmationPage() {
               Workspace
             </Link>
             <span>/</span>
-            <span className="text-[#1E3A5F]">Submission Confirmation</span>
+            <span className="text-[#1E3A5F]">Export Confirmation</span>
           </div>
-          <h1 className="font-serif text-4xl text-[#1E3A5F]">Finalize Submission</h1>
+          <h1 className="font-serif text-4xl text-[#1E3A5F]">Finalize Export</h1>
           <p className="text-sm text-[#6B6B6B] mt-2 font-light">
-            Review your appeal packet and confirm the delivery channel to the insurer.
+            Review your appeal packet and prepare a local export package for filing.
           </p>
         </header>
 
@@ -144,8 +143,8 @@ export default function ConfirmationPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           <div className="lg:col-span-7 flex flex-col gap-8">
             <div className="bg-white border-subtle p-8">
-              <h2 className="text-xs font-bold uppercase tracking-[0.2em] mb-6 text-[#1E3A5F]">
-                Select Submission Method
+                <h2 className="text-xs font-bold uppercase tracking-[0.2em] mb-6 text-[#1E3A5F]">
+                Select Export Method
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label
@@ -172,7 +171,7 @@ export default function ConfirmationPage() {
                   </div>
                   <span className="text-sm font-bold">Digital Fax</span>
                   <p className="text-[11px] text-[#6B6B6B] mt-1 leading-relaxed">
-                    Secure transmission to insurer appeals intake. Near-instant confirmation receipt.
+                    Export a fax-ready packet locally so you can send it through your own fax workflow.
                   </p>
                   <div className="mt-4 pt-4 border-t border-[#E8E4DF] flex justify-between">
                     <span className="text-[10px] font-bold uppercase text-[#1B5E3F]">
@@ -206,7 +205,7 @@ export default function ConfirmationPage() {
                   </div>
                   <span className="text-sm font-bold">USPS Certified Mail</span>
                   <p className="text-[11px] text-[#6B6B6B] mt-1 leading-relaxed">
-                    Physical delivery with signature tracking. 3-5 business days.
+                    Export a print-ready packet locally for mailing or courier delivery.
                   </p>
                   <div className="mt-4 pt-4 border-t border-[#E8E4DF] flex justify-between">
                     <span className="text-[10px] font-bold uppercase text-[#6B6B6B]">Priority</span>
@@ -254,18 +253,17 @@ export default function ConfirmationPage() {
                   Institutional Warning
                 </span>
                 <p className="text-[11px] leading-relaxed text-[#7F1D1D]">
-                  Once this appeal is transmitted, the packet in this session becomes the current
-                  filing record. Review the draft and evidence attachments before proceeding.
+                  This step only prepares a local export or copy of your packet. Review the draft and evidence attachments before sending anything through an external channel.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center space-x-4 pt-4">
               <button
-                onClick={() => void transmitPacket()}
+                onClick={() => void exportPacketLocally()}
                 className="flex-1 bg-[#1E3A5F] text-white py-4 px-6 text-[11px] font-bold tracking-[0.2em] uppercase hover:bg-[#1B5E3F] transition-all text-center"
               >
-                Transmit Appeal Packet
+                Export Packet Locally
               </button>
               <Link
                 href="/workspace"
@@ -280,10 +278,10 @@ export default function ConfirmationPage() {
             <div className="bg-[#F9F8F6] border-subtle p-8 sticky top-24">
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-[#1E3A5F]">
-                  Delivery Tracker
+                  Local Export Summary
                 </h2>
                 <span className="px-2 py-1 bg-white border border-[#E8E4DF] text-[9px] font-bold uppercase tracking-wider">
-                  {resolved.submission.status === "transmitted" ? "Ready" : "Pending Transaction"}
+                  {resolved.submission.status === "exported" ? "Prepared" : "Pending Export"}
                 </span>
               </div>
 
@@ -295,10 +293,10 @@ export default function ConfirmationPage() {
                   </div>
                   <div className="flex flex-col">
                     <span className="text-[11px] font-bold uppercase text-[#1E3A5F]">
-                      Awaiting Confirmation
+                      Awaiting Local Export
                     </span>
                     <span className="text-[10px] text-[#6B6B6B]">
-                      Verification of case assets and insurer routing.
+                      Verification of case assets and chosen export format.
                     </span>
                     <span className="text-[9px] font-medium text-[#1E3A5F] mt-1">
                       CURRENT STEP
@@ -307,9 +305,9 @@ export default function ConfirmationPage() {
                 </div>
 
                 {[
-                  ["Transmission Sent", "Packet dispatched through the selected delivery channel."],
-                  ["Insurer Acknowledged", "Receipt verification from insurer routing system."],
-                  ["Proof of Delivery", "Institutional confirmation log generated."],
+                  ["Export Prepared", "Packet exported into a user-managed local filing path."],
+                  ["User Sends Packet", "Submission happens outside Advocate through the user's workflow."],
+                  ["User Logs Outcome", "Status updates can be recorded manually after filing."],
                 ].map(([title, body]) => (
                   <div key={title} className="relative flex items-start space-x-6 z-10">
                     <div className="w-4 h-4 rounded-full bg-white border-2 border-[#E8E4DF] flex items-center justify-center ring-4 ring-[#F9F8F6]" />
@@ -332,26 +330,17 @@ export default function ConfirmationPage() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">
-                    Submission SLA
+                    Export Format
                   </span>
                   <span className="text-xs font-semibold text-[#1B5E3F]">
-                    {method === "fax" ? "< 2 Hours" : "3-5 Days"}
-                  </span>
-                </div>
-                <div className="pt-4 border-t border-[#F3F3F3] flex justify-between items-center">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">
-                    Tracking ID
-                  </span>
-                  <span className="text-[10px] font-mono text-[#1E3A5F]">
-                    {resolved.submission.trackingId}
+                    {method === "fax" ? "Fax-ready PDF" : "Print-and-mail packet"}
                   </span>
                 </div>
               </div>
 
               <div className="mt-8">
                 <p className="text-[10px] leading-relaxed text-[#6B6B6B] italic font-light">
-                  Delivery tracking is session-backed. Once transmitted, the status page will use the
-                  stored tracking metadata and activity log.
+                  Export records are session-backed. Advocate does not send the packet to the insurer for you.
                 </p>
               </div>
             </div>

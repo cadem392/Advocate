@@ -48,16 +48,17 @@ Return JSON with this EXACT structure:
   "policyNumber": "POLICY-NUMBER",
   "claimNumber": "CLAIM-NUMBER",
   "dateOfService": "Month Day, Year",
-  "totalBilled": "$X,XXX.XX",
-  "deniedAmount": "$X,XXX.XX",
+  "totalBilled": "$X,XXX.XX or null",
+  "deniedAmount": "$X,XXX.XX or null",
   "denialReason": "Plain-language reason",
   "denialCode": "PR-XXX or similar",
-  "appealDeadlineDays": 180,
+  "appealDeadlineDays": 180 or null,
   "lineItems": [{"description":"Service","cptCode":"XXXXX","amount":"$XXX.XX","status":"paid|denied|pending|billed"}],
   "rawSummary": "1-2 sentence plain-language summary"
 }
 
-Extract only what is explicitly stated. Use "unknown" for missing fields. Do not infer.
+// Fix 2: keep missing facts null/unknown instead of inventing clean-looking defaults.
+Extract only what is explicitly stated. Use "unknown" for missing strings and null for missing money or deadline fields. Do not infer.
 
 Document:
 `;

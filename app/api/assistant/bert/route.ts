@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callOpenAI } from "@/lib/openai";
+import { callOpenAI, sanitizePromptInput } from "@/lib/openai";
 import { BERT_ASSISTANT_PROMPT } from "@/lib/prompts";
 import { getOpenAIApiKey } from "@/lib/server/env";
+import { applyRateLimit } from "@/lib/server/rate-limit";
 import type { AnalysisResult, AttackTree, DraftDocument, StructuredFacts } from "@/lib/types";
 
 interface BertAssistantRequest {
@@ -165,6 +166,9 @@ function buildFallbackReply(payload: BertAssistantRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const limited = applyRateLimit(request);
+  if (limited) return limited;
+
   try {
     const payload = (await request.json()) as BertAssistantRequest;
     const message = payload.message?.trim();
@@ -185,7 +189,7 @@ export async function POST(request: NextRequest) {
       apiKey,
       [
         { role: "system", content: BERT_ASSISTANT_PROMPT },
-        { role: "user", content: `${contextSummary}\n\nAnswer the user.` },
+        { role: "user", content: `${sanitizePromptInput(contextSummary)}\n\nAnswer the user.` },
       ],
       450
     );

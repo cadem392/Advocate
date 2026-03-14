@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type {
   AnalyzeRequest,
+  AnalysisResult,
   BlindSpotRequest,
   BranchViabilityRequest,
   CaseReanalysisRequest,
@@ -39,6 +40,35 @@ export function requireNumber(value: unknown, label: string): number {
   return value;
 }
 
+function requireArray(value: unknown, label: string) {
+  if (!Array.isArray(value)) {
+    throw new ValidationError(`${label} must be an array`);
+  }
+  return value;
+}
+
+function validateAnalysisShape(value: unknown): AnalysisResult {
+  if (!isRecord(value)) {
+    throw new ValidationError("Analysis data is required");
+  }
+
+  return {
+    summary: requireNonEmptyString(value.summary, "Analysis summary"),
+    totalBilled: typeof value.totalBilled === "string" || value.totalBilled === null ? value.totalBilled : null,
+    totalOvercharged:
+      typeof value.totalOvercharged === "string" || value.totalOvercharged === null
+        ? value.totalOvercharged
+        : null,
+    deniedAmount: typeof value.deniedAmount === "string" || value.deniedAmount === null ? value.deniedAmount : null,
+    billingErrors: requireArray(value.billingErrors, "Billing errors") as AnalysisResult["billingErrors"],
+    appealGrounds: requireArray(value.appealGrounds, "Appeal grounds") as AnalysisResult["appealGrounds"],
+    deadlines: requireArray(value.deadlines, "Deadlines") as AnalysisResult["deadlines"],
+    riskLevel: requireNonEmptyString(value.riskLevel, "Risk level") as AnalysisResult["riskLevel"],
+    patientContext: requireNonEmptyString(value.patientContext, "Patient context"),
+    warnings: Array.isArray(value.warnings) ? value.warnings.filter((entry): entry is string => typeof entry === "string") : undefined,
+  };
+}
+
 export function validateStructureRequest(payload: unknown): StructureRequest {
   if (!isRecord(payload)) throw new ValidationError("Request body must be an object");
   return {
@@ -57,10 +87,11 @@ export function validateAnalyzeRequest(payload: unknown): AnalyzeRequest {
 
 export function validateStrategyRequest(payload: unknown): StrategyRequest {
   if (!isRecord(payload)) throw new ValidationError("Request body must be an object");
-  if (!isRecord(payload.analysis)) {
-    throw new ValidationError("Analysis data is required");
-  }
-  return payload as unknown as StrategyRequest;
+  return {
+    ...payload,
+    // Fix 16: require the analysis fields strategy generation actually depends on.
+    analysis: validateAnalysisShape(payload.analysis),
+  } as StrategyRequest;
 }
 
 export function validateDraftRequest(payload: unknown): DraftRequest {
@@ -69,18 +100,15 @@ export function validateDraftRequest(payload: unknown): DraftRequest {
     ...payload,
     nodeLabel: requireNonEmptyString(payload.nodeLabel, "Node label"),
     nodeDescription: requireNonEmptyString(payload.nodeDescription, "Node description"),
-    analysis: isRecord(payload.analysis)
-      ? (payload.analysis as unknown as DraftRequest["analysis"])
-      : (() => {
-          throw new ValidationError("Analysis data is required");
-        })(),
+    // Fix 16: block draft requests that only pass a non-null shell analysis object.
+    analysis: validateAnalysisShape(payload.analysis),
   } as unknown as DraftRequest;
 }
 
 export function validatePersistedCaseSession(payload: unknown): PersistedCaseSession {
   if (!isRecord(payload)) throw new ValidationError("Request body must be an object");
   if (!isRecord(payload.structuredFacts)) throw new ValidationError("Structured facts are required");
-  if (!isRecord(payload.analysis)) throw new ValidationError("Analysis data is required");
+  validateAnalysisShape(payload.analysis);
   if (!isRecord(payload.strategy)) throw new ValidationError("Strategy data is required");
   if (!isRecord(payload.draft)) throw new ValidationError("Draft data is required");
   return payload as unknown as PersistedCaseSession;

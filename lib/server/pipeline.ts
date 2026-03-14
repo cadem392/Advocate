@@ -14,12 +14,13 @@ import {
   EvidenceItem,
 } from "@/lib/types";
 import { ANALYZE_PROMPT, DRAFT_PROMPT, STRATEGY_PROMPT, STRUCTURE_PROMPT } from "@/lib/prompts";
-import { callOpenAI, extractJSON } from "@/lib/openai";
+import { callOpenAI, extractJSON, sanitizePromptInput } from "@/lib/openai";
 import { SAMPLE_ANALYSIS, SAMPLE_ATTACK_TREE, SAMPLE_DRAFT, SAMPLE_STRUCTURED_FACTS } from "@/lib/sample-data";
 import { getOpenAIApiKey, isSampleMode } from "@/lib/server/env";
 import { buildExplanation } from "@/lib/server/explanation";
 import { deriveEvidenceItems } from "@/lib/server/evidence";
 import { buildAppealRiskRequestFromAnalysis } from "@/lib/server/model-heuristics";
+import { ValidationError } from "@/lib/server/request-validation";
 import {
   heuristicAnalyze,
   heuristicDraft,
@@ -33,6 +34,99 @@ import {
   getEvidenceRelevanceScore,
 } from "@/lib/server/model-service";
 
+const DOCUMENT_RELEVANCE_KEYWORDS = [
+  "denial",
+  "claim",
+  "cpt",
+  "eob",
+  "insurer",
+  "appeal",
+  "diagnosis",
+  "coverage",
+  "deductible",
+  "copay",
+  "prior authorization",
+  "medically necessary",
+];
+
+const LOWER_QUALITY_WARNING =
+  "OpenAI API access is not configured. Results are using lower-quality heuristic estimates.";
+
+function ensureRelevantDocument(documentText: string) {
+  const lower = documentText.toLowerCase();
+  const hasKeyword = DOCUMENT_RELEVANCE_KEYWORDS.some((keyword) => lower.includes(keyword));
+  if (!hasKeyword) {
+    // Fix 1: block obviously unrelated documents before the pipeline starts.
+    throw new ValidationError(
+      "This document doesn't appear to be an insurance or medical document. Please upload a denial letter, EOB, medical bill, or policy excerpt.",
+      422
+    );
+  }
+}
+
+function countUnknownStructuredFields(facts: StructuredFacts) {
+  const values = [
+    facts.patientName,
+    facts.insurer,
+    facts.policyNumber,
+    facts.claimNumber,
+    facts.dateOfService,
+    facts.totalBilled,
+    facts.deniedAmount,
+    facts.denialReason,
+    facts.denialCode,
+    facts.appealDeadlineDays,
+  ];
+
+  return values.filter((value) => {
+    if (value === null || value === undefined) return true;
+    if (typeof value === "number") return Number.isNaN(value);
+    return String(value).trim() === "" || String(value).trim().toLowerCase() === "unknown";
+  }).length;
+}
+
+function ensureStructuredFactsMeaningful(facts: StructuredFacts) {
+  if (countUnknownStructuredFields(facts) > 3) {
+    // Fix 3: stop the pipeline when the structuring step did not recover enough signal to trust downstream steps.
+    throw new ValidationError("The document couldn't be parsed properly.", 422);
+  }
+}
+
+function ensureAnalysisMeaningful(analysis: AnalysisResult) {
+  const missingCount = [
+    analysis.summary,
+    analysis.patientContext,
+    analysis.deniedAmount,
+    analysis.appealGrounds.length ? "present" : "",
+    analysis.deadlines.length ? "present" : "",
+  ].filter((value) => value === null || `${value}`.trim() === "").length;
+
+  if (missingCount > 2) {
+    throw new ValidationError("The document couldn't be analyzed reliably. Please review the extracted text and try again.", 422);
+  }
+}
+
+function ensureStrategyMeaningful(tree: AttackTree) {
+  if (!tree.nodes?.length || !tree.edges?.length) {
+    throw new ValidationError("No actionable steps were found. The document may not contain enough case detail.", 422);
+  }
+}
+
+function ensureDraftMeaningful(draft: DraftDocument) {
+  if (!draft.content?.trim() || draft.content.trim().length < 120) {
+    throw new ValidationError("A formal draft could not be generated from this document.", 422);
+  }
+}
+
+function attachLowerQualityWarning(analysis: AnalysisResult, apiKey: string | null): AnalysisResult {
+  if (apiKey) return analysis;
+  const warnings = new Set([...(analysis.warnings || []), LOWER_QUALITY_WARNING]);
+  return {
+    ...analysis,
+    warnings: Array.from(warnings),
+  };
+}
+
 export async function runStructure(request: StructureRequest): Promise<StructuredFacts> {
   if (!request.documentText?.trim()) {
     throw new Error("Document text is required");
@@ -42,13 +136,22 @@ export async function runStructure(request: StructureRequest): Promise<Structure
     return SAMPLE_STRUCTURED_FACTS;
   }
 
+  ensureRelevantDocument(request.documentText);
   const apiKey = getOpenAIApiKey(request.apiKey);
   if (!apiKey) {
-    return heuristicStructure(request.documentText);
+    const facts = heuristicStructure(request.documentText);
+    ensureStructuredFactsMeaningful(facts);
+    return facts;
   }
 
-  const raw = await callOpenAI(apiKey, [{ role: "user", content: STRUCTURE_PROMPT + request.documentText }], 1000);
-  return JSON.parse(extractJSON(raw)) as StructuredFacts;
+  const raw = await callOpenAI(
+    apiKey,
+    [{ role: "user", content: `${STRUCTURE_PROMPT}${sanitizePromptInput(request.documentText)}` }],
+    1000
+  );
+  const facts = JSON.parse(extractJSON(raw)) as StructuredFacts;
+  ensureStructuredFactsMeaningful(facts);
+  return facts;
 }
 
 export async function runAnalyze(request: AnalyzeRequest): Promise<AnalysisResult> {
@@ -62,14 +165,23 @@ export async function runAnalyze(request: AnalyzeRequest): Promise<AnalysisResul
 
   const apiKey = getOpenAIApiKey(request.apiKey);
   if (!apiKey) {
-    return heuristicAnalyze(
+    const structuredFacts = request.structuredFacts || heuristicStructure(request.documentText);
+    ensureStructuredFactsMeaningful(structuredFacts);
+    const analysis = heuristicAnalyze(
       request.documentText,
-      request.structuredFacts || heuristicStructure(request.documentText)
+      structuredFacts
     );
+    ensureAnalysisMeaningful(analysis);
+    return attachLowerQualityWarning(analysis, apiKey);
   }
 
-  const raw = await callOpenAI(apiKey, [{ role: "user", content: ANALYZE_PROMPT + request.documentText }]);
-  return JSON.parse(extractJSON(raw)) as AnalysisResult;
+  const raw = await callOpenAI(
+    apiKey,
+    [{ role: "user", content: `${ANALYZE_PROMPT}${sanitizePromptInput(request.documentText)}` }]
+  );
+  const analysis = JSON.parse(extractJSON(raw)) as AnalysisResult;
+  ensureAnalysisMeaningful(analysis);
+  return analysis;
 }
 
 function mapNodeToIssueClass(nodeLabel: string, analysis: AnalysisResult): string {
@@ -104,11 +216,13 @@ export async function runStrategy(request: StrategyRequest): Promise<AttackTree>
       tree = heuristicStrategy(request.analysis, request.structuredFacts);
     } else {
       const raw = await callOpenAI(apiKey, [
-        { role: "user", content: STRATEGY_PROMPT + JSON.stringify(request.analysis, null, 2) },
+        { role: "user", content: STRATEGY_PROMPT + sanitizePromptInput(JSON.stringify(request.analysis, null, 2)) },
       ]);
       tree = JSON.parse(extractJSON(raw)) as AttackTree;
     }
   }
+
+  ensureStrategyMeaningful(tree);
 
   const branchScores: BranchScore[] = [];
   const evidenceSignal = Math.max(
@@ -167,7 +281,7 @@ export async function runDraft(request: DraftRequest): Promise<DraftDocument> {
   }
 
   if (isSampleMode(request.useSampleMode, request.apiKey)) {
-    return {
+    const draft = {
       type: request.documentType || "appeal_letter",
       title: request.nodeLabel,
       content: SAMPLE_DRAFT,
@@ -178,30 +292,36 @@ export async function runDraft(request: DraftRequest): Promise<DraftDocument> {
       ],
       explanation: buildExplanation({ analysis: request.analysis }),
     };
+    ensureDraftMeaningful(draft);
+    return draft;
   }
 
   const apiKey = getOpenAIApiKey(request.apiKey);
   if (!apiKey) {
-    return {
+    const draft = {
       ...heuristicDraft(request),
       explanation: buildExplanation({ analysis: request.analysis }),
     };
+    ensureDraftMeaningful(draft);
+    return draft;
   }
 
-  const ctx = `Node: ${request.nodeLabel}\nDescription: ${request.nodeDescription}\nDocument type: ${request.documentType}\nCase analysis: ${JSON.stringify(request.analysis)}`;
+  const ctx = `Node: ${request.nodeLabel}\nDescription: ${request.nodeDescription}\nDocument type: ${request.documentType}\nCase analysis: ${sanitizePromptInput(JSON.stringify(request.analysis))}`;
   const content = await callOpenAI(
     apiKey,
     [{ role: "user", content: DRAFT_PROMPT + ctx }],
     2500
   );
 
-  return {
+  const draft = {
     type: request.documentType || "appeal_letter",
     title: request.nodeLabel,
     content,
     keyPoints: request.analysis.appealGrounds.slice(0, 3).map((ground) => ground.argument),
     explanation: buildExplanation({ analysis: request.analysis }),
   };
+  ensureDraftMeaningful(draft);
+  return draft;
 }
 
 function summarizeEvidenceDocuments(evidenceDocuments: UploadedEvidenceInput[]): string[] {
@@ -448,10 +568,14 @@ export async function runCasePipelineBundle(params: {
     strategy.nodes.find((node) => node.type === "action" || node.type === "escalation") ||
     strategy.nodes[0];
 
+  if (!draftNode) {
+    throw new ValidationError("No actionable steps were found. The document may not contain enough case detail.", 422);
+  }
+
   const draft = await runDraft({
-    nodeLabel: draftNode?.label || "Internal Appeal",
-    nodeDescription: draftNode?.description || "Prepare a medically grounded internal appeal.",
-    documentType: draftNode?.documentType || "appeal_letter",
+    nodeLabel: draftNode.label,
+    nodeDescription: draftNode.description,
+    documentType: draftNode.documentType || "appeal_letter",
     analysis,
     structuredFacts,
     useSampleMode: params.useSampleMode,
@@ -507,11 +631,14 @@ export async function runCaseReanalysis(
       strategy.nodes.find((node) => node.id === strategy.explanation?.recommendedNodeId && node.documentType) ||
       strategy.nodes.find((node) => node.type === "document") ||
       strategy.nodes[0];
+    if (!draftNode) {
+      throw new ValidationError("No actionable steps were found. The document may not contain enough case detail.", 422);
+    }
     const draft = augmentDraftWithEvidence(
       await runDraft({
-        nodeLabel: draftNode?.label || "Internal Appeal",
-        nodeDescription: draftNode?.description || "Prepare a medically grounded internal appeal.",
-        documentType: draftNode?.documentType || "appeal_letter",
+        nodeLabel: draftNode.label,
+        nodeDescription: draftNode.description,
+        documentType: draftNode.documentType || "appeal_letter",
         analysis,
         structuredFacts,
         useSampleMode: true,

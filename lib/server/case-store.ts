@@ -17,6 +17,16 @@ function normalizeCaseId(caseId: string) {
   return SAFE_CASE_ID.test(caseId) ? caseId : null;
 }
 
+async function writeCaseRecordAtomically(caseId: string, record: StoredCaseRecord) {
+  const finalPath = getCasePath(caseId);
+  const tempPath = `${finalPath}.tmp`;
+  const json = JSON.stringify(record, null, 2);
+
+  // Fix 15: write to a temp file first so interrupted writes do not corrupt the case record.
+  await fs.writeFile(tempPath, json, "utf8");
+  await fs.rename(tempPath, finalPath);
+}
+
 export async function createCaseRecord(
   payload: PersistedCaseSession
 ): Promise<StoredCaseRecord> {
@@ -30,7 +40,7 @@ export async function createCaseRecord(
     payload,
   };
 
-  await fs.writeFile(getCasePath(record.id), JSON.stringify(record, null, 2), "utf8");
+  await writeCaseRecordAtomically(record.id, record);
   return record;
 }
 
@@ -65,6 +75,6 @@ export async function updateCaseRecord(
     payload,
   };
 
-  await fs.writeFile(getCasePath(safeCaseId), JSON.stringify(record, null, 2), "utf8");
+  await writeCaseRecordAtomically(safeCaseId, record);
   return record;
 }

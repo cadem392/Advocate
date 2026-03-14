@@ -4,11 +4,15 @@ import {
   validatePersistedCaseSession,
   validationErrorResponse,
 } from "@/lib/server/request-validation";
+import { applyRateLimit } from "@/lib/server/rate-limit";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ caseId: string }> }
 ) {
+  const limited = applyRateLimit(request);
+  if (limited) return limited;
+
   try {
     const { caseId } = await context.params;
     const record = await getCaseRecord(caseId);
@@ -28,6 +32,9 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ caseId: string }> }
 ) {
+  const limited = applyRateLimit(request);
+  if (limited) return limited;
+
   try {
     const { caseId } = await context.params;
     const payload = validatePersistedCaseSession(await request.json());

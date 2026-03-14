@@ -9,7 +9,11 @@ import { AdvocateNav } from "@/components/advocate-nav";
 import { BrandLockup } from "@/components/brand-lockup";
 import { SAMPLE_EOB } from "@/lib/sample-data";
 import { runCasePipeline } from "@/lib/client/run-case-pipeline";
-import { saveCaseSession } from "@/lib/client/case-session";
+import {
+  consumeSessionNotice,
+  loadCaseSession,
+  saveCaseSession,
+} from "@/lib/client/case-session";
 import type { EvidenceIngestionResult } from "@/lib/types";
 
 const methodologySteps = [
@@ -82,6 +86,7 @@ export default function HomePage() {
   const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [documentOptionIndex, setDocumentOptionIndex] = useState(0);
+  const [browserOnlyNotice, setBrowserOnlyNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -94,6 +99,25 @@ export default function HomePage() {
         target.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const existingSession = loadCaseSession();
+    const hasSeenNotice = window.localStorage.getItem("advocate.browser-only-notice.v1");
+    const transientNotice = consumeSessionNotice();
+
+    if (transientNotice) {
+      setErrorMessage(transientNotice);
+    }
+
+    if (!existingSession && !hasSeenNotice) {
+      // Fix 8: warn once that case data lives in this browser session until real persistence is configured.
+      setBrowserOnlyNotice(
+        "Cases are stored in this browser only and will be lost if your browser data is cleared."
+      );
+      window.localStorage.setItem("advocate.browser-only-notice.v1", "seen");
+    }
   }, []);
 
   useEffect(() => {
@@ -334,27 +358,9 @@ export default function HomePage() {
                   ) : null}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-8">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#1B5E3F] mb-1">Detected Denial Reason</p>
-                  <p className="text-xs font-bold">Medical necessity</p>
-                  <p className="text-[10px] text-[#6B6B6B]">Requires documentation and physician rationale</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#B83A3A] mb-1">Critical Deadline</p>
-                  <p className="text-xs font-bold">12 days remaining</p>
-                  <p className="text-[10px] text-[#6B6B6B]">Internal appeal window closes Mar 28</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#D97706] mb-1">Evidence Gap</p>
-                  <p className="text-xs font-bold">Provider progress notes</p>
-                  <p className="text-[10px] text-[#6B6B6B]">No imaging history attached to prior request</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#1B5E3F] mb-1">Next Document</p>
-                  <p className="text-xs font-bold">Internal appeal draft</p>
-                  <p className="text-[10px] text-[#6B6B6B]">Can be generated immediately</p>
-                </div>
+              <div className="rounded-sm border border-[#E8E4DF] bg-white px-4 py-3 text-[11px] leading-relaxed text-[#6B6B6B]">
+                {/* Fix 5: remove static denial/deadline mock values until real case data exists. */}
+                Upload or paste a denial letter, EOB, policy excerpt, or provider note. Advocate will extract real case details after you generate the strategy.
               </div>
               <div className="flex space-x-4 pt-4">
                 <button
@@ -395,6 +401,9 @@ export default function HomePage() {
               </div>
               {errorMessage ? (
                 <p className="pt-3 text-[11px] font-medium text-[#B83A3A]">{errorMessage}</p>
+              ) : null}
+              {browserOnlyNotice ? (
+                <p className="pt-1 text-[11px] font-medium text-[#6B6B6B]">{browserOnlyNotice}</p>
               ) : null}
             </div>
           </div>
