@@ -170,6 +170,21 @@ async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<string> {
   }
 }
 
+async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string> {
+  try {
+    // Bundled parser fallback: avoids machine-specific dependence on local Python + pypdf.
+    const pdfParseModule = (await import("pdf-parse")) as unknown as {
+      default?: (dataBuffer: Buffer) => Promise<{ text?: string }>;
+    };
+    const pdfParse = pdfParseModule.default;
+    if (typeof pdfParse !== "function") return "";
+    const parsed = await pdfParse(buffer);
+    return normalizeWhitespace(parsed?.text || "");
+  } catch {
+    return "";
+  }
+}
+
 function extractPdfText(buffer: Buffer): string {
   const raw = buffer.toString("latin1");
 
@@ -245,6 +260,10 @@ export async function ingestFile(file: File): Promise<EvidenceIngestionResult> {
   } else if (mimeType === "application/pdf" || extension === "pdf") {
     // Bug fix: prefer bundled PDF.js extraction so PDF parsing does not depend on local Python packages.
     extractedText = await extractPdfTextWithPdfJs(buffer);
+    if (!extractedText) {
+      // Bundled Node fallback keeps PDF parsing consistent across machines without requiring Python.
+      extractedText = await extractPdfTextWithPdfParse(buffer);
+    }
     if (!extractedText) {
       extractedText = await extractPdfTextWithPython(buffer);
     }
