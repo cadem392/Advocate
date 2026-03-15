@@ -412,7 +412,7 @@ export async function runCasePipeline(params: {
 
     saveCaseSession(state);
     clearPipelineProgress();
-    return syncCaseRecord(state);
+    return syncCaseRecord(state, getIdToken);
   } catch (error) {
     savePartialProgress({
       documentText,
@@ -420,14 +420,10 @@ export async function runCasePipeline(params: {
       structuredFacts,
       analysis,
       strategy,
-      draft,
-    },
-    {
-      useSampleMode,
-    }
-  );
-
-  return syncCaseRecord(state, getIdToken);
+      errorMessage: error instanceof Error ? error.message : "Failed to generate case strategy",
+    });
+    throw error;
+  }
 }
 
 export async function rerunCaseWithEvidence(params: {

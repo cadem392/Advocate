@@ -133,15 +133,18 @@ function looksLikeReadablePdfText(value: string): boolean {
 
 async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<string> {
   try {
-    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const loadingTask = pdfjs.getDocument({
+    const pdfjsMod = await import("pdfjs-dist");
+    const pdfjs = pdfjsMod?.default ?? pdfjsMod;
+    const getDocument = (pdfjs as Record<string, unknown>).getDocument;
+    if (typeof getDocument !== "function") return "";
+    const loadingTask = getDocument({
       data: new Uint8Array(buffer),
       useWorkerFetch: false,
       isEvalSupported: false,
       disableFontFace: true,
       useSystemFonts: true,
     });
-    const document = await loadingTask.promise;
+    const document = await loadingTask.promise as { numPages: number; getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str?: string }> }> }>; destroy: () => Promise<void> };
     const parts: string[] = [];
 
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
