@@ -34,11 +34,6 @@ interface AdvocateNavProps {
 const activeClass = "text-[#1E3A5F] border-b-2 border-[#1E3A5F] pb-1";
 const inactiveClass = "hover:text-[#1B5E3F] transition-colors";
 
-function truncateValue(value: string, maxLength: number) {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength - 1).trim()}...`;
-}
-
 function splitHref(href: string) {
   const [pathWithHash] = href.split("?");
   const [path, hash] = pathWithHash.split("#");
@@ -65,8 +60,13 @@ export function AdvocateNav({
   const pathname = usePathname();
   const router = useRouter();
   const { configured, user, signOut } = useAuth();
-  const safeCaseId = truncateValue(caseId, 24);
-  const safePatientName = truncateValue(patientName, 24);
+
+  function navHref(linkHref: string): string {
+    if (!user && linkHref !== "/" && !linkHref.startsWith("/auth")) {
+      return `/auth?redirect=${encodeURIComponent(linkHref)}`;
+    }
+    return linkHref;
+  }
 
   function handleSameRouteNavigation(event: MouseEvent<HTMLAnchorElement>, href: string) {
     const currentPath = pathname || "/";
@@ -94,11 +94,12 @@ export function AdvocateNav({
   }
 
   function renderNavLink(label: ReactNode, href: string, id: string, isActive: boolean) {
+    const effectiveHref = navHref(href);
     return (
       <Link
-        href={href}
+        href={effectiveHref}
         id={id}
-        onClick={(event) => handleSameRouteNavigation(event, href)}
+        onClick={(event) => handleSameRouteNavigation(event, effectiveHref)}
         aria-current={isActive ? "page" : undefined}
         className={`${isActive ? activeClass : inactiveClass} relative z-[1] whitespace-nowrap pointer-events-auto`}
       >
@@ -131,14 +132,6 @@ export function AdvocateNav({
         </div>
 
         <div className="flex shrink-0 items-center justify-end space-x-4">
-          {showCaseContext ? (
-            <div className="mr-2 flex max-w-[280px] flex-col text-right">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Current Case</span>
-              <span className="truncate text-xs font-semibold">
-                {safeCaseId} | {safePatientName}
-              </span>
-            </div>
-          ) : null}
           {configured && !user ? (
             <Link
               href="/auth"
