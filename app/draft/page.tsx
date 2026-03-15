@@ -17,7 +17,9 @@ import {
 } from "lucide-react";
 import { AdvocateNav } from "@/components/advocate-nav";
 import { FormalLetterPreview } from "@/components/formal-letter-preview";
+import { useAuth } from "@/contexts/auth-context";
 import {
+  clearCaseSession,
   createFallbackCaseSession,
   loadCaseSession,
   updateCaseSession,
@@ -47,12 +49,18 @@ function createId(prefix: string) {
 
 export default function DraftPage() {
   const router = useRouter();
+  const { user, loading: authLoading, getIdToken } = useAuth();
   const [caseState, setCaseState] = useState<CaseSessionState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      clearCaseSession();
+      router.replace("/");
+      return;
+    }
     setCaseState(loadCaseSession() || createFallbackCaseSession());
-  }, []);
+  }, [authLoading, user, router]);
 
   const resolved = caseState || createFallbackCaseSession();
   const { structuredFacts, strategy, draft, draftEditor, vaultDocuments } = resolved;
@@ -68,7 +76,7 @@ export default function DraftPage() {
     const next = updateCaseSession(updater);
     setCaseState(next);
     setNotice(message);
-    void syncCaseSessionRecord(next).then(setCaseState).catch(() => undefined);
+    void syncCaseSessionRecord(next, getIdToken).then(setCaseState).catch(() => undefined);
   }
 
   function insertEvidenceSnippet() {

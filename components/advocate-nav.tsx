@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 import { BrandLockup } from "@/components/brand-lockup";
+import { useAuth } from "@/contexts/auth-context";
+import { clearCaseSession } from "@/lib/client/case-session";
 
 type ActiveItem =
   | "intake"
   | "workspace"
+  | "cases"
   | "methodology"
   | "evidence"
   | "support"
@@ -60,6 +63,8 @@ export function AdvocateNav({
   exportLabel = "Export Case Packet",
 }: AdvocateNavProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, signOut } = useAuth();
   const safeCaseId = truncateValue(caseId, 24);
   const safePatientName = truncateValue(patientName, 24);
 
@@ -119,6 +124,7 @@ export function AdvocateNav({
         <div className="hidden min-w-0 items-center justify-center gap-x-8 text-[11px] font-bold uppercase tracking-widest text-[#4A4A4A] lg:flex">
           {renderNavLink("Intake", intakeHref, "nav-intake", activeItem === "intake")}
           {renderNavLink("Workspace", workspaceHref, "nav-workspace", activeItem === "workspace" || activeItem === "dashboard")}
+          {user ? renderNavLink("My Cases", "/cases", "nav-cases", activeItem === "cases") : null}
           {renderNavLink("Methodology", methodologyHref, "nav-methodology", activeItem === "methodology")}
           {renderNavLink("Evidence", evidenceHref, "nav-evidence", activeItem === "evidence")}
           {renderNavLink("Support", supportHref, "nav-support", activeItem === "support")}
@@ -133,6 +139,15 @@ export function AdvocateNav({
               </span>
             </div>
           ) : null}
+          {!user ? (
+            <Link
+              href="/auth"
+              id="nav-signin"
+              className="relative z-[1] bg-[#1E3A5F] text-white px-4 py-2 text-[10px] font-bold tracking-widest uppercase hover:bg-[#1B5E3F] transition-all whitespace-nowrap pointer-events-auto"
+            >
+              Sign in
+            </Link>
+          ) : null}
           <Link
             href={exportHref}
             id="nav-cta-packet"
@@ -141,6 +156,18 @@ export function AdvocateNav({
           >
             {exportLabel}
           </Link>
+          {user ? (
+            <button
+              type="button"
+              onClick={() => {
+                clearCaseSession();
+                void signOut().then(() => router.push("/"));
+              }}
+              className="relative z-[1] text-[10px] font-bold tracking-widest uppercase text-[#6B6B6B] hover:text-[#1E3A5F] whitespace-nowrap"
+            >
+              Sign out
+            </button>
+          ) : null}
         </div>
       </div>
     </nav>

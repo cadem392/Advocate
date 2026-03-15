@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -15,7 +16,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import { AdvocateNav } from "@/components/advocate-nav";
+import { useAuth } from "@/contexts/auth-context";
 import {
+  clearCaseSession,
   createFallbackCaseSession,
   loadCaseSession,
   updateCaseSession,
@@ -35,12 +38,19 @@ function formatTimestamp(value?: string) {
 }
 
 export default function StatusPage() {
+  const router = useRouter();
+  const { user, loading: authLoading, getIdToken } = useAuth();
   const [caseState, setCaseState] = useState<CaseSessionState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      clearCaseSession();
+      router.replace("/");
+      return;
+    }
     setCaseState(loadCaseSession() || createFallbackCaseSession());
-  }, []);
+  }, [authLoading, user, router]);
 
   const resolved = caseState || createFallbackCaseSession();
   const submission = resolved.submission;
@@ -72,7 +82,7 @@ export default function StatusPage() {
       ],
     }));
 
-    const synced = await syncCaseSessionRecord(next).catch(() => next);
+    const synced = await syncCaseSessionRecord(next, getIdToken).catch(() => next);
     setCaseState(synced);
     setNotice("Physician follow-up reminder queued in the case activity log.");
   }

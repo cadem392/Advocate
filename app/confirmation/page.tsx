@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Circle, FileCheck, Mail, Printer } from "lucide-react";
 import { AdvocateNav } from "@/components/advocate-nav";
 import { BrandLockup } from "@/components/brand-lockup";
+import { useAuth } from "@/contexts/auth-context";
 import {
+  clearCaseSession,
   createFallbackCaseSession,
   loadCaseSession,
   updateCaseSession,
@@ -16,6 +18,7 @@ import { syncCaseSessionRecord } from "@/lib/client/run-case-pipeline";
 
 export default function ConfirmationPage() {
   const router = useRouter();
+  const { user, loading: authLoading, getIdToken } = useAuth();
   const [caseState, setCaseState] = useState<CaseSessionState | null>(null);
   const [method, setMethod] = useState<"fax" | "mail">("fax");
   const [email, setEmail] = useState("case-review@example.com");
@@ -23,12 +26,17 @@ export default function ConfirmationPage() {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      clearCaseSession();
+      router.replace("/");
+      return;
+    }
     const current = loadCaseSession() || createFallbackCaseSession();
     setCaseState(current);
     setMethod(current.submission.method);
     setEmail(current.submission.confirmationEmail);
     setSmsOptIn(current.submission.smsOptIn);
-  }, []);
+  }, [authLoading, user, router]);
 
   const resolved = caseState || createFallbackCaseSession();
   const attachmentCount = useMemo(() => resolved.vaultDocuments.length, [resolved.vaultDocuments.length]);
@@ -70,7 +78,7 @@ export default function ConfirmationPage() {
       ],
     }));
 
-    const synced = await syncCaseSessionRecord(next).catch(() => next);
+    const synced = await syncCaseSessionRecord(next, getIdToken).catch(() => next);
     setCaseState(synced);
     setNotice(`Packet prepared for local ${method === "fax" ? "fax-ready export" : "mail-ready export"}.`);
     router.push("/status");

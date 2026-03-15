@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCaseRecord, updateCaseRecord } from "@/lib/server/case-store";
+import { getAuthUid, normalizeCaseId } from "@/lib/server/firebase-admin";
+import { uploadCaseIntakeDocument } from "@/lib/server/firebase-storage-upload";
+import {
+  getCaseRecordForUser,
+  updateCaseRecordForUser,
+} from "@/lib/server/firestore-case-store";
 import {
   validatePersistedCaseSession,
   validationErrorResponse,
@@ -14,13 +19,19 @@ export async function GET(
   if (limited) return limited;
 
   try {
+    const uid = await getAuthUid(request);
+    if (!uid) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const { caseId } = await context.params;
-    const record = await getCaseRecord(caseId);
-
+    const safeId = normalizeCaseId(caseId);
+    if (!safeId) {
+      return NextResponse.json({ error: "Invalid case id" }, { status: 400 });
+    }
+    const record = await getCaseRecordForUser(uid, safeId);
     if (!record) {
       return NextResponse.json({ error: "Case not found" }, { status: 404 });
     }
-
     return NextResponse.json(record);
   } catch (error) {
     console.error("Get case record error:", error);
@@ -36,14 +47,23 @@ export async function PATCH(
   if (limited) return limited;
 
   try {
+    const uid = await getAuthUid(request);
+    if (!uid) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const { caseId } = await context.params;
+    const safeId = normalizeCaseId(caseId);
+    if (!safeId) {
+      return NextResponse.json({ error: "Invalid case id" }, { status: 400 });
+    }
     const payload = validatePersistedCaseSession(await request.json());
-    const record = await updateCaseRecord(caseId, payload);
-
+    const record = await updateCaseRecordForUser(uid, safeId, payload);
     if (!record) {
       return NextResponse.json({ error: "Case not found" }, { status: 404 });
     }
-
+    await uploadCaseIntakeDocument(uid, safeId, payload.documentText).catch(
+      (err) => console.error("Upload intake document to Storage failed:", err)
+    );
     return NextResponse.json(record);
   } catch (error) {
     console.error("Update case record error:", error);
