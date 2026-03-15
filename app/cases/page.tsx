@@ -26,12 +26,18 @@ function formatDate(iso: string) {
 
 export default function MyCasesPage() {
   const router = useRouter();
-  const { user, loading: authLoading, getIdToken } = useAuth();
+  const { configured, user, loading: authLoading, getIdToken } = useAuth();
   const [records, setRecords] = useState<StoredCaseRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!configured) {
+      // Auth-backed case history is unavailable in local demo mode.
+      setLoading(false);
+      setError("Authentication is not configured in this environment.");
+      return;
+    }
     if (!user) {
       router.replace("/auth?redirect=/cases");
       return;
@@ -59,7 +65,7 @@ export default function MyCasesPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, getIdToken, router]);
+  }, [configured, user, getIdToken, router]);
 
   async function openCase(record: StoredCaseRecord) {
     const state: CaseSessionState = {
@@ -70,7 +76,7 @@ export default function MyCasesPage() {
     router.push("/workspace");
   }
 
-  if (authLoading || !user) {
+  if (configured && (authLoading || !user)) {
     return (
       <div className="min-h-screen bg-[#FDFCFB] flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-[#1E3A5F]" />

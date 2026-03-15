@@ -218,6 +218,10 @@ async function syncCaseRecord(
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const token = getIdToken ? await getIdToken() : null;
+  if (!token) {
+    // Local/demo mode does not have a backend user session, so skip auth-backed persistence instead of throwing 401 noise.
+    return state;
+  }
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }

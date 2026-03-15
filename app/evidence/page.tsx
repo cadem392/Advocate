@@ -109,7 +109,7 @@ function filterDocuments(documents: VaultDocument[], activeFilter: string) {
 
 export default function EvidencePage() {
   const router = useRouter();
-  const { user, loading: authLoading, getIdToken } = useAuth();
+  const { configured: authConfigured, user, loading: authLoading, getIdToken } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [caseState, setCaseState] = useState<CaseSessionState | null>(null);
   const [activeFilter, setActiveFilter] = useState("All Documents");
@@ -118,7 +118,7 @@ export default function EvidencePage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (authConfigured && !authLoading && !user) {
       clearCaseSession();
       router.replace("/");
       return;
@@ -126,7 +126,7 @@ export default function EvidencePage() {
     const current = loadCaseSession() || createFallbackCaseSession();
     setCaseState(current);
     setSelectedDocId(current.vaultDocuments[0]?.id ?? null);
-  }, [authLoading, user, router]);
+  }, [authConfigured, authLoading, user, router]);
 
   const resolved = caseState || createFallbackCaseSession();
   const documents = resolved.vaultDocuments;

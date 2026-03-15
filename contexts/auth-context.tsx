@@ -12,6 +12,7 @@ import {
 import type { User } from "firebase/auth";
 import {
   getFirebaseAuth,
+  isFirebaseAuthConfigured,
   signInWithEmailAndPassword as firebaseSignInWithEmail,
   createUserWithEmailAndPassword as firebaseCreateUser,
   signInWithPopup,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/firebase/auth";
 
 interface AuthContextValue {
+  configured: boolean;
   user: User | null;
   loading: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -32,10 +34,15 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const configured = isFirebaseAuthConfigured();
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(configured);
 
   useEffect(() => {
+    if (!configured) {
+      setLoading(false);
+      return;
+    }
     const auth = getFirebaseAuth();
     if (!auth) {
       setLoading(false);
@@ -46,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [configured]);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
     const auth = getFirebaseAuth();
@@ -79,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(
     () => ({
+      configured,
       user,
       loading,
       signInWithEmail,
@@ -88,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       getIdToken,
     }),
     [
+      configured,
       user,
       loading,
       signInWithEmail,
@@ -105,6 +114,7 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {
     return {
+      configured: false,
       user: null,
       loading: false,
       signInWithEmail: async () => {},

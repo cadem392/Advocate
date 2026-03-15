@@ -225,18 +225,18 @@ function openBertPrompt(prompt: string) {
 
 export default function WorkspacePage() {
   const router = useRouter();
-  const { user, loading: authLoading, getIdToken } = useAuth();
+  const { configured: authConfigured, user, loading: authLoading, getIdToken } = useAuth();
   const [caseState, setCaseState] = useState<CaseSessionState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (authConfigured && !authLoading && !user) {
       clearCaseSession();
       router.replace("/");
       return;
     }
     setCaseState(loadCaseSession() || createFallbackCaseSession());
-  }, [authLoading, user, router]);
+  }, [authConfigured, authLoading, user, router]);
 
   const resolved = caseState || createFallbackCaseSession();
   const { structuredFacts, analysis, strategy, draft } = resolved;

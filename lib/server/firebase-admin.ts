@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { readFileSync } from "fs";
 import { NextRequest } from "next/server";
 
 const SAFE_ID = /^[a-zA-Z0-9-]+$/;
@@ -7,9 +8,28 @@ function getAdminApp(): admin.app.App | null {
   if (admin.apps.length > 0) {
     return admin.app();
   }
-  const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+  let projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
+  let clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+  let privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const credentialsPath = process.env.FIREBASE_ADMIN_CREDENTIALS_PATH;
+
+  if ((!projectId || !clientEmail || !privateKey) && credentialsPath) {
+    try {
+      // Allow local/server setup from a Firebase service-account JSON file instead of pasting secrets into env vars.
+      const parsed = JSON.parse(readFileSync(credentialsPath, "utf8")) as {
+        project_id?: string;
+        client_email?: string;
+        private_key?: string;
+      };
+      projectId = parsed.project_id || projectId;
+      clientEmail = parsed.client_email || clientEmail;
+      privateKey = parsed.private_key || privateKey;
+    } catch {
+      return null;
+    }
+  }
+
   if (!projectId || !clientEmail || !privateKey) return null;
   const storageBucket =
     process.env.FIREBASE_STORAGE_BUCKET ||

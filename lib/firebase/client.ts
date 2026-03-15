@@ -13,10 +13,15 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+export function isFirebaseAuthConfigured() {
+  // Keep auth optional in local/demo environments unless the Firebase client config is actually present.
+  return Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+}
+
 function getFirebaseApp(): FirebaseApp | null {
   if (typeof window === "undefined") return null;
   if (getApps().length > 0) return getApp();
-  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) return null;
+  if (!isFirebaseAuthConfigured()) return null;
   return initializeApp(firebaseConfig);
 }
 

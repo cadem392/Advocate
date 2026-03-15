@@ -78,7 +78,7 @@ const intakeDocumentOptions = [
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, getIdToken } = useAuth();
+  const { configured: authConfigured, user, getIdToken } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [documentText, setDocumentText] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -158,7 +158,7 @@ export default function HomePage() {
   }
 
   async function generateCase(useSampleMode: boolean) {
-    if (!user) {
+    if (authConfigured && !user) {
       router.push("/auth?redirect=/");
       return;
     }
@@ -169,7 +169,7 @@ export default function HomePage() {
       const state = await runCasePipeline({
         documentText: useSampleMode ? SAMPLE_EOB : documentText,
         useSampleMode,
-        getIdToken,
+        getIdToken: authConfigured ? getIdToken : undefined,
       });
       saveCaseSession(state);
       router.push("/workspace");

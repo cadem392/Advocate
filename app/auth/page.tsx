@@ -13,7 +13,7 @@ function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") ?? "/";
-  const { user, loading: authLoading, signInWithEmail, signUpWithEmail } = useAuth();
+  const { configured, user, loading: authLoading, signInWithEmail, signUpWithEmail } = useAuth();
   const [tab, setTab] = useState<Tab>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,6 +55,33 @@ function AuthContent() {
 
   if (user) {
     return null;
+  }
+
+  if (!configured) {
+    return (
+      <div className="min-h-screen bg-[#FDFCFB] text-[#1E3A5F] flex flex-col">
+        <header className="border-b border-[#E8E4DF] bg-white px-8 py-4">
+          <Link href="/" className="inline-block">
+            <BrandLockup width={320} height={80} priority imageClassName="h-10 w-auto" />
+          </Link>
+        </header>
+
+        <main className="flex-1 flex items-center justify-center p-8">
+          <div className="w-full max-w-md border border-[#E8E4DF] bg-white p-8 text-center">
+            <h1 className="mb-4 font-serif text-3xl">Authentication is unavailable</h1>
+            <p className="mb-6 text-sm leading-relaxed text-[#6B6B6B]">
+              This environment is running in local demo mode. Return home to use the case workflow without signing in.
+            </p>
+            <Link
+              href={redirect}
+              className="inline-block bg-[#1E3A5F] px-6 py-3 text-[11px] font-bold uppercase tracking-widest text-white hover:bg-[#1B5E3F]"
+            >
+              Return to app
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   return (

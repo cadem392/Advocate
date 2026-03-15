@@ -64,7 +64,7 @@ export function AdvocateNav({
 }: AdvocateNavProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { configured, user, signOut } = useAuth();
   const safeCaseId = truncateValue(caseId, 24);
   const safePatientName = truncateValue(patientName, 24);
 
@@ -124,7 +124,7 @@ export function AdvocateNav({
         <div className="hidden min-w-0 items-center justify-center gap-x-8 text-[11px] font-bold uppercase tracking-widest text-[#4A4A4A] lg:flex">
           {renderNavLink("Intake", intakeHref, "nav-intake", activeItem === "intake")}
           {renderNavLink("Workspace", workspaceHref, "nav-workspace", activeItem === "workspace" || activeItem === "dashboard")}
-          {user ? renderNavLink("My Cases", "/cases", "nav-cases", activeItem === "cases") : null}
+          {configured && user ? renderNavLink("My Cases", "/cases", "nav-cases", activeItem === "cases") : null}
           {renderNavLink("Methodology", methodologyHref, "nav-methodology", activeItem === "methodology")}
           {renderNavLink("Evidence", evidenceHref, "nav-evidence", activeItem === "evidence")}
           {renderNavLink("Support", supportHref, "nav-support", activeItem === "support")}
@@ -139,7 +139,7 @@ export function AdvocateNav({
               </span>
             </div>
           ) : null}
-          {!user ? (
+          {configured && !user ? (
             <Link
               href="/auth"
               id="nav-signin"
@@ -156,7 +156,7 @@ export function AdvocateNav({
           >
             {exportLabel}
           </Link>
-          {user ? (
+          {configured && user ? (
             <button
               type="button"
               onClick={() => {

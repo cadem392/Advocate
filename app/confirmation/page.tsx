@@ -18,7 +18,7 @@ import { syncCaseSessionRecord } from "@/lib/client/run-case-pipeline";
 
 export default function ConfirmationPage() {
   const router = useRouter();
-  const { user, loading: authLoading, getIdToken } = useAuth();
+  const { configured: authConfigured, user, loading: authLoading, getIdToken } = useAuth();
   const [caseState, setCaseState] = useState<CaseSessionState | null>(null);
   const [method, setMethod] = useState<"fax" | "mail">("fax");
   const [email, setEmail] = useState("case-review@example.com");
@@ -26,7 +26,7 @@ export default function ConfirmationPage() {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (authConfigured && !authLoading && !user) {
       clearCaseSession();
       router.replace("/");
       return;
@@ -36,7 +36,7 @@ export default function ConfirmationPage() {
     setMethod(current.submission.method);
     setEmail(current.submission.confirmationEmail);
     setSmsOptIn(current.submission.smsOptIn);
-  }, [authLoading, user, router]);
+  }, [authConfigured, authLoading, user, router]);
 
   const resolved = caseState || createFallbackCaseSession();
   const attachmentCount = useMemo(() => resolved.vaultDocuments.length, [resolved.vaultDocuments.length]);
