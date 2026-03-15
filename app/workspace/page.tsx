@@ -43,6 +43,10 @@ function formatPercent(value?: number) {
   return `${Math.round((value || 0) * 100)}%`;
 }
 
+function formatMoneyLabel(value?: string | null) {
+  return value && value !== "unknown" ? value : "Not found in document";
+}
+
 function getNodeStyle(node?: AttackTreeNode) {
   switch (node?.type) {
     case "document":
@@ -322,25 +326,30 @@ export default function WorkspacePage() {
               <div className="flex justify-between items-center pb-2 border-b border-[#F3F3F3]">
                 <span className="text-[11px] font-medium text-[#6B6B6B]">Insurer</span>
                 <span className="text-[11px] font-bold">
-                  {structuredFacts.insurer || "Unknown insurer"}
+                  {structuredFacts.insurer && structuredFacts.insurer !== "unknown"
+                    ? structuredFacts.insurer
+                    : "Not found in document"}
                 </span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-[#F3F3F3]">
                 <span className="text-[11px] font-medium text-[#6B6B6B]">Denied Amount</span>
                 <span className="text-[11px] font-bold text-[#B83A3A]">
-                  {analysis.deniedAmount}
+                  {/* Fix 10: show missing monetary values as missing, not fabricated zeros. */}
+                  {formatMoneyLabel(analysis.deniedAmount)}
                 </span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-[#F3F3F3]">
                 <span className="text-[11px] font-medium text-[#6B6B6B]">Total Billed</span>
-                <span className="text-[11px] font-bold">{analysis.totalBilled}</span>
+                <span className="text-[11px] font-bold">{formatMoneyLabel(analysis.totalBilled)}</span>
               </div>
               <div className="flex flex-col pt-2">
                 <span className="text-[11px] font-medium text-[#6B6B6B] mb-1">
                   Denial Rationale
                 </span>
                 <span className="text-[11px] font-semibold leading-snug">
-                  {structuredFacts.denialReason || analysis.summary}
+                  {structuredFacts.denialReason && structuredFacts.denialReason !== "unknown"
+                    ? structuredFacts.denialReason
+                    : analysis.summary}
                 </span>
               </div>
             </div>
@@ -355,13 +364,13 @@ export default function WorkspacePage() {
                 </span>
               </div>
               <span className="text-xs font-bold text-[#B83A3A]">
-                {deadline ? `${deadline.daysRemaining} Days Left` : "Pending"}
+                {deadline ? `${deadline.daysRemaining} Days Left` : "Not found in document"}
               </span>
             </div>
             <p className="text-[11px] leading-relaxed text-[#7F1D1D]">
               {deadline
                 ? `${deadline.action} by ${formatDateLabel(deadline.date)}. ${deadline.consequence}`
-                : "No primary deadline detected yet."}
+                : "No primary deadline was found in the uploaded document."}
             </p>
           </section>
 

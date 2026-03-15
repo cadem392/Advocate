@@ -58,11 +58,14 @@ async function ingestUploadedDocument(file: File): Promise<EvidenceIngestionResu
     body: formData,
   });
 
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error("Failed to ingest uploaded document");
+    throw new Error(
+      typeof data?.error === "string" ? data.error : "Failed to ingest uploaded document"
+    );
   }
 
-  return (await response.json()) as EvidenceIngestionResult;
+  return data as EvidenceIngestionResult;
 }
 
 async function scoreUploadedDocument(
@@ -186,6 +189,7 @@ export default function EvidencePage() {
           confidence: 0.55,
           source: "heuristic" as const,
           reasoning: "fallback score for uploaded document",
+          warning: undefined,
         }));
 
         return {
@@ -201,7 +205,8 @@ export default function EvidencePage() {
           relevanceScore: score.relevanceScore,
           scoreSource: score.source,
           scoreConfidence: score.confidence,
-          scoreReasoning: score.reasoning,
+          // Fix 17: surface heuristic fallback warnings directly in the document insight panel.
+          scoreReasoning: score.warning ? `${score.reasoning} ${score.warning}` : score.reasoning,
           verified: false,
           linked: false,
           missing: false,

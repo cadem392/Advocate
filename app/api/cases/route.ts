@@ -9,6 +9,7 @@ import {
   validatePersistedCaseSession,
   validationErrorResponse,
 } from "@/lib/server/request-validation";
+import { applyRateLimit } from "@/lib/server/rate-limit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,6 +26,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const limited = applyRateLimit(request);
+  if (limited) return limited;
+
   try {
     const uid = await getAuthUid(request);
     if (!uid) {

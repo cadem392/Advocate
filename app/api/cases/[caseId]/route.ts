@@ -9,11 +9,15 @@ import {
   validatePersistedCaseSession,
   validationErrorResponse,
 } from "@/lib/server/request-validation";
+import { applyRateLimit } from "@/lib/server/rate-limit";
 
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ caseId: string }> }
 ) {
+  const limited = applyRateLimit(request);
+  if (limited) return limited;
+
   try {
     const uid = await getAuthUid(request);
     if (!uid) {
@@ -39,6 +43,9 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ caseId: string }> }
 ) {
+  const limited = applyRateLimit(request);
+  if (limited) return limited;
+
   try {
     const uid = await getAuthUid(request);
     if (!uid) {

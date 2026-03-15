@@ -29,9 +29,9 @@ function sanitizePersonName(value: string) {
   return tokens.slice(0, 4).join(" ").trim() || "unknown";
 }
 
-function parseCurrency(text: string, fallback = "$0.00") {
+function parseCurrency(text: string) {
   const match = text.match(/\$[\d,]+(?:\.\d{2})?/);
-  return match?.[0] || fallback;
+  return match?.[0] || null;
 }
 
 function formatCurrency(value: number) {
@@ -41,8 +41,8 @@ function formatCurrency(value: number) {
   })}`;
 }
 
-function toNumber(value: string) {
-  return Number(value.replace(/[^0-9.-]/g, "")) || 0;
+function toNumber(value?: string | null) {
+  return Number((value || "").replace(/[^0-9.-]/g, "")) || 0;
 }
 
 function shortDenialLabel(reason: string) {
@@ -65,7 +65,8 @@ function inferInsurer(text: string) {
     .map(cleanLine)
     .filter(Boolean);
   const uppercaseLine = lines.find((line) => /^[A-Z0-9 .&'-]{4,}$/.test(line) && line.length < 60);
-  return uppercaseLine ? toTitleCase(uppercaseLine) : "Unknown insurer";
+  // Fix 2: leave insurer unknown when the document never names a carrier.
+  return uppercaseLine ? toTitleCase(uppercaseLine) : "unknown";
 }
 
 function inferPatientName(text: string) {
@@ -134,12 +135,13 @@ function inferDeniedAmount(
     .reduce((sum, item) => sum + toNumber(item.amount), 0);
   if (deniedTotal > 0) return formatCurrency(deniedTotal);
 
+  // Fix 10: never fabricate a denied amount when the document contains no usable currency signal.
   return parseCurrency(text);
 }
 
 function inferTotalBilled(
   text: string,
-  deniedAmount: string,
+  deniedAmount: string | null,
   lineItems: StructuredFacts["lineItems"] = []
 ) {
   const direct = matchFirst(text, [
@@ -168,7 +170,8 @@ function inferDenialReason(text: string) {
   if (/prior authorization/i.test(text)) {
     return "Prior authorization requirement cited by insurer.";
   }
-  return "Coverage denied by insurer.";
+  // Fix 2: keep denial reason unknown when the document does not state one.
+  return "unknown";
 }
 
 function inferDenialCode(text: string) {
@@ -180,7 +183,8 @@ function inferDenialCode(text: string) {
 
 function inferAppealDeadlineDays(text: string) {
   const match = text.match(/(?:appeal|internal appeal)[^.]*?within\s+(\d{1,3})\s+(?:calendar\s+)?days/i);
-  return match ? Number(match[1]) : 180;
+  // Fix 10: do not fall back to a fabricated 180-day deadline.
+  return match ? Number(match[1]) : null;
 }
 
 function parseLineItems(text: string): StructuredFacts["lineItems"] {
@@ -254,8 +258,8 @@ function detectBillingErrors(facts: StructuredFacts, documentText: string): Anal
       id: "coding-mri-contrast",
       type: "wrong_code",
       description: "The case references multiple MRI procedure codes, which may indicate a coding inconsistency.",
-      originalCharge: facts.deniedAmount,
-      estimatedOvercharge: facts.deniedAmount,
+      originalCharge: facts.deniedAmount || "Not found in document",
+      estimatedOvercharge: facts.deniedAmount || "Not found in document",
       cptCode: "70553/70551",
       evidence: "Both MRI code variants appear in the document text.",
     });
@@ -318,37 +322,41 @@ function buildAppealGrounds(facts: StructuredFacts, text: string, billingErrors:
 function buildDeadlines(facts: StructuredFacts, text: string): AnalysisResult["deadlines"] {
   const deadlines: AnalysisResult["deadlines"] = [];
   const noticeDate = inferNoticeDate(text);
-  const appealDays = facts.appealDeadlineDays || 180;
+  const appealDays = facts.appealDeadlineDays;
   const serviceDate = facts.dateOfService !== "unknown" ? facts.dateOfService : "the notice date";
 
-  deadlines.push({
-    id: "deadline-internal-appeal",
-    action: "File internal appeal",
-    date: noticeDate !== "unknown" ? `Within ${appealDays} days of ${noticeDate}` : `Within ${appealDays} days of notice`,
-    daysRemaining: appealDays,
-    consequence: `Missing the internal appeal window can lock in responsibility for ${facts.deniedAmount}.`,
-    urgency: appealDays <= 30 ? "critical" : appealDays <= 60 ? "high" : "medium",
-  });
+  if (appealDays !== null) {
+    deadlines.push({
+      id: "deadline-internal-appeal",
+      action: "File internal appeal",
+      date: noticeDate !== "unknown" ? `Within ${appealDays} days of ${noticeDate}` : `Within ${appealDays} days of notice`,
+      daysRemaining: appealDays,
+      consequence: `Missing the internal appeal window can lock in responsibility for ${facts.deniedAmount || "the denied amount listed in the notice"}.`,
+      urgency: appealDays <= 30 ? "critical" : appealDays <= 60 ? "high" : "medium",
+    });
+  }
 
   if (/external review/.test(text.toLowerCase())) {
     deadlines.push({
       id: "deadline-external-review",
       action: "Prepare external review fallback",
       date: "If the internal appeal is denied",
-      daysRemaining: Math.max(30, Math.floor(appealDays / 3)),
+      daysRemaining: appealDays !== null ? Math.max(30, Math.floor(appealDays / 3)) : 30,
       consequence: "Delaying escalation can narrow the independent review path.",
       urgency: "medium",
     });
   }
 
-  deadlines.push({
-    id: "deadline-evidence",
-    action: "Collect supporting records",
-    date: `Before the appeal packet is finalized for ${serviceDate}`,
-    daysRemaining: Math.max(7, Math.min(21, Math.floor(appealDays / 4))),
-    consequence: "Missing provider notes or policy support weakens the appeal narrative.",
-    urgency: "high",
-  });
+  if (appealDays !== null) {
+    deadlines.push({
+      id: "deadline-evidence",
+      action: "Collect supporting records",
+      date: `Before the appeal packet is finalized for ${serviceDate}`,
+      daysRemaining: Math.max(7, Math.min(21, Math.floor(appealDays / 4))),
+      consequence: "Missing provider notes or policy support weakens the appeal narrative.",
+      urgency: "high",
+    });
+  }
 
   return deadlines.slice(0, 3);
 }
@@ -378,7 +386,7 @@ export function heuristicStructure(documentText: string): StructuredFacts {
     denialCode,
     appealDeadlineDays,
     lineItems,
-    rawSummary: `${patientName !== "unknown" ? patientName : "The member"} has a denied claim with ${insurer}. Main issue: ${shortDenialLabel(denialReason)}`,
+    rawSummary: `${patientName !== "unknown" ? patientName : "The member"} has a denied claim with ${insurer !== "unknown" ? insurer : "an unknown insurer"}. Main issue: ${denialReason !== "unknown" ? shortDenialLabel(denialReason) : "denial reason not found."}`,
   };
 }
 
@@ -399,13 +407,13 @@ export function heuristicAnalyze(documentText: string, facts: StructuredFacts): 
           : "low";
 
   return {
-    summary: `${facts.patientName !== "unknown" ? facts.patientName : "The member"} has a claim denied by ${facts.insurer}. The current denial reason is ${shortDenialLabel(facts.denialReason)}${billingErrors.length ? ` ${billingErrors.length} billing or coding issue(s) were also detected.` : ""}`,
+    summary: `${facts.patientName !== "unknown" ? facts.patientName : "The member"} has a claim denied by ${facts.insurer !== "unknown" ? facts.insurer : "an unknown insurer"}. The current denial reason is ${facts.denialReason !== "unknown" ? shortDenialLabel(facts.denialReason) : "not found in the document"}${billingErrors.length ? ` ${billingErrors.length} billing or coding issue(s) were also detected.` : ""}`,
     totalBilled: facts.totalBilled,
     totalOvercharged:
       billingErrors.length > 0
         ? `$${billingErrors.reduce((sum, error) => sum + toNumber(error.estimatedOvercharge), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        : "$0.00",
-    deniedAmount: facts.deniedAmount || `$${deniedAmountValue.toFixed(2)}`,
+        : null,
+    deniedAmount: facts.deniedAmount,
     billingErrors,
     appealGrounds,
     deadlines,
@@ -425,7 +433,7 @@ export function heuristicStrategy(
   const evidenceLabel = missingClinicalSupport ? "Provider Support Needed" : "Policy Support Needed";
   const deadlineLabel = analysis.deadlines[0]
     ? `${analysis.deadlines[0].daysRemaining} Days Left`
-    : "Deadline Review";
+    : "Deadline Not Found";
 
   const nodes: AttackTree["nodes"] = [
     {
@@ -561,22 +569,22 @@ export function heuristicDraft(
 
 ${today}
 
-${facts?.insurer || "Insurer"} Appeals Department
-[RECIPIENT ADDRESS]
+${facts?.insurer && facts.insurer !== "unknown" ? facts.insurer : "[Insurer not found in document]"} Appeals Department
+[Recipient address not found in document]
 
 RE: ${request.nodeLabel}
-Claim Number: ${facts?.claimNumber || "[CLAIM NUMBER]"}
-Policy Number: ${facts?.policyNumber || "[POLICY NUMBER]"}
-Member: ${facts?.patientName || "[MEMBER NAME]"}
-Date of Service: ${facts?.dateOfService || "[DATE OF SERVICE]"}
-Denied Amount: ${request.analysis.deniedAmount}
+Claim Number: ${facts?.claimNumber && facts.claimNumber !== "unknown" ? facts.claimNumber : "[Claim number not found in document]"}
+Policy Number: ${facts?.policyNumber && facts.policyNumber !== "unknown" ? facts.policyNumber : "[Policy number not found in document]"}
+Member: ${facts?.patientName && facts.patientName !== "unknown" ? facts.patientName : "[Member name not found in document]"}
+Date of Service: ${facts?.dateOfService && facts.dateOfService !== "unknown" ? facts.dateOfService : "[Date of service not found in document]"}
+Denied Amount: ${request.analysis.deniedAmount || "Not found in document"}
 ${facts?.denialCode && facts.denialCode !== "unknown" ? `Denial Code: ${facts.denialCode}` : ""}
 
 Dear Appeals Review Board:
 
 Please accept this correspondence as a timely internal appeal of the denial associated with the above-referenced claim. I request full reconsideration of the adverse benefit determination and a written explanation of any clinical or policy basis relied upon to maintain the denial.
 
-The current denial rationale states: ${facts?.denialReason || request.analysis.summary}
+The current denial rationale states: ${facts?.denialReason && facts.denialReason !== "unknown" ? facts.denialReason : request.analysis.summary}
 
 Denied services under review:
 ${serviceSection}

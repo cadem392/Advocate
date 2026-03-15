@@ -60,7 +60,7 @@ export default function StatusPage() {
   const escalationStages = useMemo(
     () => [
       { stage: "Stage 01", label: "Internal Appeal (L1)", borderColor: "#1B5E3F", muted: false },
-      { stage: "Stage 02", label: "Internal Appeal (L2)", borderColor: "#D97706", muted: submission.status !== "transmitted" },
+      { stage: "Stage 02", label: "Internal Appeal (L2)", borderColor: "#D97706", muted: submission.status !== "exported" },
       { stage: "Stage 03", label: "External State Review", borderColor: "#E8E4DF", muted: true },
       { stage: "Stage 04", label: "Regulatory Complaint", borderColor: "#E8E4DF", muted: true },
     ],
@@ -109,14 +109,16 @@ export default function StatusPage() {
                 Case Status
               </p>
               <h2 className="font-serif text-2xl mb-4">
-                {submission.status === "transmitted" ? "Submitted" : "In Review"}
+                {submission.status === "exported" ? "Prepared for Filing" : "In Review"}
               </h2>
             </div>
             <div className="space-y-3">
               <div className="flex justify-between items-center pb-2 border-b border-[#F3F3F3]">
                 <span className="text-[11px] font-medium text-[#6B6B6B]">Insurer</span>
                 <span className="text-[11px] font-bold">
-                  {resolved.structuredFacts.insurer || "Unknown insurer"}
+                  {resolved.structuredFacts.insurer && resolved.structuredFacts.insurer !== "unknown"
+                    ? resolved.structuredFacts.insurer
+                    : "Not found in document"}
                 </span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-[#F3F3F3]">
@@ -125,10 +127,10 @@ export default function StatusPage() {
               </div>
               <div className="flex flex-col pt-2">
                 <span className="text-[11px] font-medium text-[#6B6B6B] mb-1">
-                  Submission Reference
+                  Export State
                 </span>
                 <span className="text-[11px] font-semibold tabular-nums">
-                  {submission.trackingId}
+                  {submission.status === "exported" ? "Prepared locally" : "Not exported yet"}
                 </span>
               </div>
             </div>
@@ -142,9 +144,9 @@ export default function StatusPage() {
               </span>
             </div>
             <p className="text-[11px] leading-relaxed text-[#4A4A4A]">
-              {submission.status === "transmitted"
-                ? "Transmission recorded. Await insurer acknowledgment or request for additional information."
-                : "Packet not transmitted yet. Return to confirmation to finalize delivery."}
+              {submission.status === "exported"
+                ? "Local export recorded. Send the packet through your own delivery workflow and log the outcome here."
+                : "Packet not exported yet. Return to confirmation to prepare a local filing packet."}
             </p>
           </section>
 
@@ -167,7 +169,7 @@ export default function StatusPage() {
               </ul>
             ) : (
               <p className="text-[11px] text-[#6B6B6B] leading-relaxed">
-                No evidence has been attached to this case yet. Upload documents from the evidence vault before submitting or escalating.
+                No evidence has been attached to this case yet. Upload documents from the evidence vault before exporting or escalating.
               </p>
             )}
           </section>
@@ -190,7 +192,7 @@ export default function StatusPage() {
                     href="/confirmation"
                     className="px-4 py-2 bg-white border border-[#1E3A5F] text-[10px] font-bold uppercase tracking-widest hover:bg-[#F3F3F3] transition-colors"
                   >
-                    View Receipt
+                    View Export
                   </Link>
                   <button
                     onClick={() => void notifyPhysician()}
@@ -235,11 +237,11 @@ export default function StatusPage() {
                       <p className="text-[10px] font-bold text-[#1B5E3F] uppercase tracking-widest">
                         {formatTimestamp(submission.submittedAt)}
                       </p>
-                      <h4 className="text-xs font-bold">Internal Appeal Filed</h4>
+                      <h4 className="text-xs font-bold">Local Packet Prepared</h4>
                       <p className="text-[11px] text-[#6B6B6B] mt-1">
-                        {submission.status === "transmitted"
-                          ? `Submitted via ${submission.method === "fax" ? "digital fax" : "certified mail"}.`
-                          : "Waiting for submission."}
+                        {submission.status === "exported"
+                          ? `Prepared as a ${submission.method === "fax" ? "fax-ready export" : "mail-ready export"}.`
+                          : "Waiting for local export."}
                       </p>
                     </div>
                   </div>
@@ -252,10 +254,10 @@ export default function StatusPage() {
                         In Progress
                       </p>
                       <h4 className="text-xs font-bold text-[#1E3A5F]">
-                        Awaiting Insurer Response
+                        Awaiting User Filing Update
                       </h4>
                       <p className="text-[11px] text-[#6B6B6B] mt-1">
-                        Standard regulatory window: 72 hours for expedited.
+                        Record the actual send date and insurer response after you file outside Advocate.
                       </p>
                     </div>
                   </div>
@@ -408,8 +410,7 @@ export default function StatusPage() {
         <div className="flex items-center space-x-2">
           <ShieldCheck className="text-[#1B5E3F] h-4 w-4" />
           <span className="text-[11px] font-medium text-[#4A4A4A]">
-            Session-backed tracking active. Submission metadata persists across the current browser
-            flow.
+            Session-backed export history active. Local filing notes persist across the current browser flow.
           </span>
         </div>
         <div className="flex space-x-6 text-[10px] font-bold tracking-widest uppercase text-[#6B6B6B]">

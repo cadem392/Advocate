@@ -3,6 +3,7 @@ import {
   AttackTree,
   DraftDocument,
   EvidenceItem,
+  PipelineProgress,
   StructuredFacts,
 } from "@/lib/types";
 import {
@@ -14,6 +15,8 @@ import {
 } from "@/lib/sample-data";
 
 const CASE_SESSION_KEY = "advocate.case-session.v1";
+const CASE_NOTICE_KEY = "advocate.case-session-notice.v1";
+const CASE_PIPELINE_PROGRESS_KEY = "advocate.case-pipeline-progress.v1";
 
 export interface VaultDocument {
   id: string;
@@ -41,8 +44,8 @@ export interface DraftEditorState {
 
 export interface SubmissionState {
   method: "fax" | "mail";
-  status: "draft" | "transmitted";
-  trackingId: string;
+  status: "draft" | "exported";
+  trackingId?: string;
   recipient: string;
   confirmationEmail: string;
   smsOptIn: boolean;
@@ -72,6 +75,7 @@ export interface CaseSessionState {
   activity: ActivityItem[];
   selectedNodeId?: string;
   generatedAt: string;
+  notices?: string[];
 }
 
 function nowIso() {
@@ -155,7 +159,6 @@ export function createFallbackCaseSession(): CaseSessionState {
     submission: {
       method: "fax",
       status: "draft",
-      trackingId: "ADV-TXN-DRAFT",
       recipient: SAMPLE_STRUCTURED_FACTS.insurer,
       confirmationEmail: "case-review@example.com",
       smsOptIn: true,
@@ -171,6 +174,7 @@ export function createFallbackCaseSession(): CaseSessionState {
     ],
     selectedNodeId: SAMPLE_ATTACK_TREE.nodes.find((node) => node.type === "document")?.id,
     generatedAt,
+    notices: [],
   };
 }
 
@@ -199,6 +203,7 @@ function normalizeCaseSession(raw: Partial<CaseSessionState>): CaseSessionState 
       normalized.activity && normalized.activity.length
         ? normalized.activity
         : fallback.activity,
+    notices: normalized.notices || [],
   };
 }
 
@@ -222,6 +227,41 @@ export function loadCaseSession(): CaseSessionState | null {
 export function clearCaseSession() {
   if (!browserAvailable()) return;
   window.sessionStorage.removeItem(CASE_SESSION_KEY);
+}
+
+export function consumeSessionNotice(): string | null {
+  if (!browserAvailable()) return null;
+  const raw = window.sessionStorage.getItem(CASE_NOTICE_KEY);
+  if (!raw) return null;
+  window.sessionStorage.removeItem(CASE_NOTICE_KEY);
+  return raw;
+}
+
+export function setSessionNotice(message: string) {
+  if (!browserAvailable()) return;
+  window.sessionStorage.setItem(CASE_NOTICE_KEY, message);
+}
+
+export function savePipelineProgress(progress: PipelineProgress) {
+  if (!browserAvailable()) return;
+  window.sessionStorage.setItem(CASE_PIPELINE_PROGRESS_KEY, JSON.stringify(progress));
+}
+
+export function loadPipelineProgress(): PipelineProgress | null {
+  if (!browserAvailable()) return null;
+  const raw = window.sessionStorage.getItem(CASE_PIPELINE_PROGRESS_KEY);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as PipelineProgress;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPipelineProgress() {
+  if (!browserAvailable()) return;
+  window.sessionStorage.removeItem(CASE_PIPELINE_PROGRESS_KEY);
 }
 
 export function updateCaseSession(

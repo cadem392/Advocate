@@ -4,12 +4,22 @@ import {
   CasePipelineResult,
   CaseReanalysisRequest,
   DraftDocument,
+  PipelineProgress,
   PersistedCaseSession,
   StructuredFacts,
   StoredCaseRecord,
   UploadedEvidenceInput,
 } from "@/lib/types";
-import { CaseSessionState, type ActivityItem, type VaultDocument } from "@/lib/client/case-session";
+import {
+  CaseSessionState,
+  clearPipelineProgress,
+  loadPipelineProgress,
+  saveCaseSession,
+  savePipelineProgress,
+  setSessionNotice,
+  type ActivityItem,
+  type VaultDocument,
+} from "@/lib/client/case-session";
 
 async function postJSON<T>(path: string, payload: unknown): Promise<T> {
   const response = await fetch(path, {
@@ -144,8 +154,10 @@ function buildCaseSession(
     submission: existing?.submission || {
       method: "fax",
       status: "draft",
-      trackingId: "ADV-TXN-DRAFT",
-      recipient: structuredFacts.insurer || "Insurer appeals department",
+      recipient:
+        structuredFacts.insurer && structuredFacts.insurer !== "unknown"
+          ? structuredFacts.insurer
+          : "Insurer appeals department",
       confirmationEmail: "case-review@example.com",
       smsOptIn: true,
     },
@@ -154,6 +166,7 @@ function buildCaseSession(
       strategy.nodes.find((node) => node.id === strategy.explanation?.recommendedNodeId)?.id ||
       strategy.nodes.find((node) => node.type === "document")?.id,
     generatedAt,
+    notices: Array.from(new Set([...(existing?.notices || []), ...(analysis.warnings || [])])),
   };
 }
 
@@ -187,6 +200,7 @@ function toPersistedCaseSession(state: CaseSessionState): PersistedCaseSession {
     activity: state.activity,
     selectedNodeId: state.selectedNodeId,
     generatedAt: state.generatedAt,
+    notices: state.notices,
   };
 }
 
@@ -216,14 +230,25 @@ async function syncCaseRecord(
     });
 
     if (!response.ok) {
+      // Fix 7: convert persistence failures into a visible session notice instead of silently continuing.
+      const message = "Your case couldn't be saved. Check your connection and try again.";
       console.error(`Case record sync failed: ${response.status} ${response.statusText}`);
-      return state;
+      setSessionNotice(message);
+      return {
+        ...state,
+        notices: Array.from(new Set([...(state.notices || []), message])),
+      };
     }
 
     const record = (await response.json()) as StoredCaseRecord;
     if (!record || !record.id) {
       console.error("Invalid case record returned from server");
-      return state;
+      const message = "Your case couldn't be saved. Check your connection and try again.";
+      setSessionNotice(message);
+      return {
+        ...state,
+        notices: Array.from(new Set([...(state.notices || []), message])),
+      };
     }
     return {
       ...state,
@@ -231,7 +256,12 @@ async function syncCaseRecord(
     };
   } catch (error) {
     console.error("Error syncing case record:", error);
-    return state;
+    const message = "Your case couldn't be saved. Check your connection and try again.";
+    setSessionNotice(message);
+    return {
+      ...state,
+      notices: Array.from(new Set([...(state.notices || []), message])),
+    };
   }
 }
 
@@ -242,49 +272,151 @@ export async function syncCaseSessionRecord(
   return syncCaseRecord(state, getIdToken);
 }
 
+function matchesProgress(progress: PipelineProgress | null, params: { documentText: string; useSampleMode: boolean }) {
+  return Boolean(
+    progress &&
+      progress.documentText === params.documentText &&
+      progress.useSampleMode === params.useSampleMode
+  );
+}
+
+function savePartialProgress(params: {
+  documentText: string;
+  useSampleMode: boolean;
+  structuredFacts?: StructuredFacts;
+  analysis?: AnalysisResult;
+  strategy?: AttackTree;
+  errorMessage: string;
+}) {
+  if (!params.structuredFacts && !params.analysis && !params.strategy) {
+    return;
+  }
+
+  const lastCompletedStep = params.strategy
+    ? "strategy"
+    : params.analysis
+      ? "analyze"
+      : "structure";
+
+  savePipelineProgress({
+    status: "partial",
+    documentText: params.documentText,
+    useSampleMode: params.useSampleMode,
+    lastCompletedStep,
+    structuredFacts: params.structuredFacts,
+    analysis: params.analysis,
+    strategy: params.strategy,
+    errorMessage: params.errorMessage,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 export async function runCasePipeline(params: {
   documentText: string;
   useSampleMode: boolean;
   getIdToken?: () => Promise<string | null>;
 }): Promise<CaseSessionState> {
   const { documentText, useSampleMode, getIdToken } = params;
+  const existingProgress = loadPipelineProgress();
+  const resumableProgress = matchesProgress(existingProgress, params) ? existingProgress : null;
+  let structuredFacts = resumableProgress?.structuredFacts;
+  let analysis = resumableProgress?.analysis;
+  let strategy = resumableProgress?.strategy;
 
-  const structuredFacts = await postJSON<StructuredFacts>("/api/structure", {
-    documentText,
-    useSampleMode,
-  });
+  try {
+    if (!structuredFacts) {
+      structuredFacts = await postJSON<StructuredFacts>("/api/structure", {
+        documentText,
+        useSampleMode,
+      });
+      // Fix 18: persist completed steps so retries resume from the last successful stage.
+      savePartialProgress({
+        documentText,
+        useSampleMode,
+        structuredFacts,
+        errorMessage: "",
+      });
+    }
 
-  const analysis = await postJSON<AnalysisResult>("/api/analyze", {
-    documentText,
-    structuredFacts,
-    useSampleMode,
-  });
+    if (!analysis) {
+      analysis = await postJSON<AnalysisResult>("/api/analyze", {
+        documentText,
+        structuredFacts,
+        useSampleMode,
+      });
+      savePartialProgress({
+        documentText,
+        useSampleMode,
+        structuredFacts,
+        analysis,
+        errorMessage: "",
+      });
+    }
 
-  const strategy = await postJSON<AttackTree>("/api/strategy", {
-    analysis,
-    structuredFacts,
-    useSampleMode,
-  });
+    if (!strategy) {
+      strategy = await postJSON<AttackTree>("/api/strategy", {
+        analysis,
+        structuredFacts,
+        useSampleMode,
+      });
+      savePartialProgress({
+        documentText,
+        useSampleMode,
+        structuredFacts,
+        analysis,
+        strategy,
+        errorMessage: "",
+      });
+    }
 
-  const draftNode = pickDraftNode(strategy);
-  // Bug fix: Handle case where pickDraftNode returns undefined gracefully
-  const draft = await postJSON<DraftDocument>("/api/draft", {
-    nodeLabel: draftNode?.label || "Internal Appeal",
-    nodeDescription:
-      draftNode?.description || "Prepare a medically grounded internal appeal.",
-    documentType: draftNode?.documentType || "appeal_letter",
-    analysis,
-    structuredFacts,
-    useSampleMode,
-  });
+    const draftNode = pickDraftNode(strategy);
+    if (!draftNode) {
+      const message = "No actionable steps were found. The document may not contain enough case detail.";
+      // Fix 12: stop when the tree has no draftable node instead of fabricating a generic appeal.
+      savePartialProgress({
+        documentText,
+        useSampleMode,
+        structuredFacts,
+        analysis,
+        strategy,
+        errorMessage: message,
+      });
+      throw new Error(message);
+    }
 
-  if (!draft) {
-    throw new Error("Failed to generate draft document");
-  }
+    const draft = await postJSON<DraftDocument>("/api/draft", {
+      nodeLabel: draftNode.label,
+      nodeDescription: draftNode.description,
+      documentType: draftNode.documentType || "appeal_letter",
+      analysis,
+      structuredFacts,
+      useSampleMode,
+    });
 
-  const state = buildCaseSession(
-    {
+    if (!draft) {
+      throw new Error("Failed to generate draft document");
+    }
+
+    const state = buildCaseSession(
+      {
+        documentText,
+        structuredFacts,
+        analysis,
+        strategy,
+        draft,
+      },
+      {
+        useSampleMode,
+      }
+    );
+
+    saveCaseSession(state);
+    clearPipelineProgress();
+    return syncCaseRecord(state);
+  } catch (error) {
+    savePartialProgress({
       documentText,
+      useSampleMode,
       structuredFacts,
       analysis,
       strategy,

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAppealRiskScore } from "@/lib/server/model-service";
+import { applyRateLimit } from "@/lib/server/rate-limit";
 
 export async function POST(request: NextRequest) {
+  const limited = applyRateLimit(request);
+  if (limited) return limited;
+
   try {
     const payload = await request.json();
     // Bug fix: Validate payload is a non-empty object before passing to model service

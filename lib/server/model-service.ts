@@ -52,17 +52,16 @@ function toCamelCaseKeys<T>(value: T): T {
   return value;
 }
 
-function normalizeEvidenceRelevance(value: number): number {
-  const percentage = value <= 1 ? value * 100 : value;
-  return Math.min(100, Math.max(0, percentage + 50)) / 100;
-}
-
 async function postJSON<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse | null> {
   const baseUrl = getModelServiceUrl();
   if (!baseUrl) return null;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
+  const timeout = setTimeout(() => {
+    // Fix 17: log model-service timeouts explicitly instead of silently disappearing into fallback mode.
+    console.warn(`[Advocate] Model service timeout after 3000ms for ${path}. Falling back to heuristic estimates.`);
+    controller.abort();
+  }, 3000);
 
   try {
     const response = await fetch(`${baseUrl}${path}`, {
@@ -81,7 +80,9 @@ async function postJSON<TRequest, TResponse>(path: string, body: TRequest): Prom
     if (!responseData) return null;
     return toCamelCaseKeys(responseData as TResponse);
   } catch (error) {
-    // Bug fix: Silently return null on abort or other errors for graceful fallback to heuristics
+    if (error instanceof Error && error.name !== "AbortError") {
+      console.warn(`[Advocate] Model service request failed for ${path}: ${error.message}`);
+    }
     return null;
   } finally {
     clearTimeout(timeout);
@@ -90,7 +91,10 @@ async function postJSON<TRequest, TResponse>(path: string, body: TRequest): Prom
 
 export async function getAppealRiskScore(input: AppealRiskRequest): Promise<AppealRiskScore> {
   const remote = await postJSON<AppealRiskRequest, AppealRiskScore>("/predict/appeal-risk", input);
-  return remote || heuristicAppealRisk(input);
+  return remote || {
+    ...heuristicAppealRisk(input),
+    warning: "Appeal risk used fallback estimates because the model service did not respond in time.",
+  };
 }
 
 export async function getBranchViability(input: BranchViabilityRequest): Promise<BranchScore> {
@@ -114,6 +118,11 @@ export async function getEvidenceRelevanceScore(
 
   return {
     ...resolved,
-    relevanceScore: Number(normalizeEvidenceRelevance(resolved.relevanceScore).toFixed(2)),
+    // Fix 11: keep relevance scores at their actual scale instead of inflating them.
+    relevanceScore: Number(Math.min(1, Math.max(0, resolved.relevanceScore)).toFixed(2)),
+    warning:
+      remote === null
+        ? "Scoring used fallback estimates because the model service did not respond in time."
+        : resolved.warning,
   };
 }

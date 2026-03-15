@@ -27,14 +27,15 @@ export interface AppealGround {
 
 export interface AnalysisResult {
   summary: string;
-  totalBilled: string;
-  totalOvercharged: string;
-  deniedAmount: string;
+  totalBilled: string | null;
+  totalOvercharged: string | null;
+  deniedAmount: string | null;
   billingErrors: BillingError[];
   appealGrounds: AppealGround[];
   deadlines: Deadline[];
   riskLevel: "critical" | "high" | "medium" | "low";
   patientContext: string;
+  warnings?: string[];
 }
 
 export interface EvidenceItem {
@@ -85,6 +86,7 @@ export interface EvidenceRelevanceScore {
   reasoning: string;
   evidenceScore?: number;
   caseSimilarity?: number;
+  warning?: string;
 }
 
 export interface EvidenceIngestionResult {
@@ -124,8 +126,8 @@ export interface DraftEditorSnapshot {
 
 export interface SubmissionSnapshot {
   method: "fax" | "mail";
-  status: "draft" | "transmitted";
-  trackingId: string;
+  status: "draft" | "exported";
+  trackingId?: string;
   recipient: string;
   confirmationEmail: string;
   smsOptIn: boolean;
@@ -243,6 +245,7 @@ export interface PersistedCaseSession extends CasePipelineResult {
   activity: ActivitySnapshot[];
   selectedNodeId?: string;
   generatedAt: string;
+  notices?: string[];
 }
 
 export interface StoredCaseRecord {
@@ -259,11 +262,11 @@ export interface StructuredFacts {
   policyNumber: string;
   claimNumber: string;
   dateOfService: string;
-  totalBilled: string;
-  deniedAmount: string;
+  totalBilled: string | null;
+  deniedAmount: string | null;
   denialReason: string;
   denialCode: string;
-  appealDeadlineDays: number;
+  appealDeadlineDays: number | null;
   lineItems: Array<{
     description: string;
     cptCode: string;
@@ -332,4 +335,16 @@ export interface CaseReanalysisRequest {
   analysis?: AnalysisResult;
   strategy?: AttackTree;
   evidenceDocuments?: UploadedEvidenceInput[];
+}
+
+export interface PipelineProgress {
+  status: "partial";
+  documentText: string;
+  useSampleMode: boolean;
+  lastCompletedStep: "structure" | "analyze" | "strategy";
+  structuredFacts?: StructuredFacts;
+  analysis?: AnalysisResult;
+  strategy?: AttackTree;
+  errorMessage: string;
+  updatedAt: string;
 }

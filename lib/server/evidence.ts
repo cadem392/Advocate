@@ -101,7 +101,8 @@ export async function deriveEvidenceItems(
         relevanceScore: score.relevanceScore,
         scoreSource: score.source,
         scoreConfidence: score.confidence,
-        scoreReasoning: score.reasoning,
+        // Fix 17: carry fallback-scoring warnings into the UI-facing evidence metadata.
+        scoreReasoning: score.warning ? `${score.reasoning} ${score.warning}` : score.reasoning,
       };
     })
   );

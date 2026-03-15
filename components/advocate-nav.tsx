@@ -108,7 +108,7 @@ export function AdvocateNav({
   }
 
   return (
-    <nav className="sticky top-0 z-[100] isolate border-b border-[#E8E4DF] bg-[#FDFCFB] px-8 py-2 pointer-events-auto">
+    <nav className="sticky top-0 z-[100] isolate border-b border-[#E8E4DF] bg-[#FDFCFB] px-8 py-1 pointer-events-auto">
       <div className="mx-auto grid max-w-[1536px] grid-cols-[auto_1fr_auto] items-center gap-8">
         <div className="flex min-w-0 items-center">
           <Link
@@ -117,7 +117,7 @@ export function AdvocateNav({
             onClick={(event) => handleSameRouteNavigation(event, homeHref)}
             className="relative z-[1] flex shrink-0 items-center pointer-events-auto"
           >
-            <BrandLockup width={460} height={110} priority imageClassName="h-[56px] w-auto" />
+            <BrandLockup width={460} height={110} priority imageClassName="h-[72px] w-auto -mb-1" />
           </Link>
         </div>
 

@@ -14,7 +14,7 @@ function clamp(value: number, min = 0, max = 1): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function parseCurrency(value?: string): number {
+function parseCurrency(value?: string | null): number {
   if (!value) return 0;
   return Number(value.replace(/[^0-9.-]/g, "")) || 0;
 }

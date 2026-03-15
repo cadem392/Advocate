@@ -4,8 +4,12 @@ import {
   validateCaseReanalysisRequest,
   validationErrorResponse,
 } from "@/lib/server/request-validation";
+import { applyRateLimit } from "@/lib/server/rate-limit";
 
 export async function POST(request: NextRequest) {
+  const limited = applyRateLimit(request);
+  if (limited) return limited;
+
   try {
     const payload = validateCaseReanalysisRequest(await request.json());
     const result = await runCaseReanalysis(payload);
