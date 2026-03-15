@@ -14,7 +14,7 @@ import {
   EvidenceItem,
 } from "@/lib/types";
 import { ANALYZE_PROMPT, DRAFT_PROMPT, STRATEGY_PROMPT, STRUCTURE_PROMPT } from "@/lib/prompts";
-import { callOpenAI, extractJSON, sanitizePromptInput } from "@/lib/openai";
+import { callOpenAI, extractJSON, isOpenAIFallbackError, sanitizePromptInput } from "@/lib/openai";
 import { SAMPLE_ANALYSIS, SAMPLE_ATTACK_TREE, SAMPLE_DRAFT, SAMPLE_STRUCTURED_FACTS } from "@/lib/sample-data";
 import { getOpenAIApiKey, isSampleMode } from "@/lib/server/env";
 import { buildExplanation } from "@/lib/server/explanation";
@@ -51,6 +51,8 @@ const DOCUMENT_RELEVANCE_KEYWORDS = [
 
 const LOWER_QUALITY_WARNING =
   "OpenAI API access is not configured. Results are using lower-quality heuristic estimates.";
+const OPENAI_UNAVAILABLE_WARNING =
+  "OpenAI API is temporarily unavailable or out of quota. Results are using lower-quality heuristic estimates.";
 
 function ensureRelevantDocument(documentText: string) {
   const lower = documentText.toLowerCase();
@@ -127,6 +129,13 @@ function attachLowerQualityWarning(analysis: AnalysisResult, apiKey: string | nu
   };
 }
 
+function attachFallbackWarning(analysis: AnalysisResult, warning: string): AnalysisResult {
+  return {
+    ...analysis,
+    warnings: Array.from(new Set([...(analysis.warnings || []), warning])),
+  };
+}
+
 export async function runStructure(request: StructureRequest): Promise<StructuredFacts> {
   if (!request.documentText?.trim()) {
     throw new Error("Document text is required");
@@ -144,14 +153,23 @@ export async function runStructure(request: StructureRequest): Promise<Structure
     return facts;
   }
 
-  const raw = await callOpenAI(
-    apiKey,
-    [{ role: "user", content: `${STRUCTURE_PROMPT}${sanitizePromptInput(request.documentText)}` }],
-    1000
-  );
-  const facts = JSON.parse(extractJSON(raw)) as StructuredFacts;
-  ensureStructuredFactsMeaningful(facts);
-  return facts;
+  try {
+    const raw = await callOpenAI(
+      apiKey,
+      [{ role: "user", content: `${STRUCTURE_PROMPT}${sanitizePromptInput(request.documentText)}` }],
+      1000
+    );
+    const facts = JSON.parse(extractJSON(raw)) as StructuredFacts;
+    ensureStructuredFactsMeaningful(facts);
+    return facts;
+  } catch (error) {
+    if (!isOpenAIFallbackError(error)) {
+      throw error;
+    }
+    const facts = heuristicStructure(request.documentText);
+    ensureStructuredFactsMeaningful(facts);
+    return facts;
+  }
 }
 
 export async function runAnalyze(request: AnalyzeRequest): Promise<AnalysisResult> {
@@ -175,13 +193,24 @@ export async function runAnalyze(request: AnalyzeRequest): Promise<AnalysisResul
     return attachLowerQualityWarning(analysis, apiKey);
   }
 
-  const raw = await callOpenAI(
-    apiKey,
-    [{ role: "user", content: `${ANALYZE_PROMPT}${sanitizePromptInput(request.documentText)}` }]
-  );
-  const analysis = JSON.parse(extractJSON(raw)) as AnalysisResult;
-  ensureAnalysisMeaningful(analysis);
-  return analysis;
+  try {
+    const raw = await callOpenAI(
+      apiKey,
+      [{ role: "user", content: `${ANALYZE_PROMPT}${sanitizePromptInput(request.documentText)}` }]
+    );
+    const analysis = JSON.parse(extractJSON(raw)) as AnalysisResult;
+    ensureAnalysisMeaningful(analysis);
+    return analysis;
+  } catch (error) {
+    if (!isOpenAIFallbackError(error)) {
+      throw error;
+    }
+    const structuredFacts = request.structuredFacts || heuristicStructure(request.documentText);
+    ensureStructuredFactsMeaningful(structuredFacts);
+    const analysis = heuristicAnalyze(request.documentText, structuredFacts);
+    ensureAnalysisMeaningful(analysis);
+    return attachFallbackWarning(analysis, OPENAI_UNAVAILABLE_WARNING);
+  }
 }
 
 function mapNodeToIssueClass(nodeLabel: string, analysis: AnalysisResult): string {
@@ -215,10 +244,17 @@ export async function runStrategy(request: StrategyRequest): Promise<AttackTree>
     if (!apiKey) {
       tree = heuristicStrategy(request.analysis, request.structuredFacts);
     } else {
-      const raw = await callOpenAI(apiKey, [
-        { role: "user", content: STRATEGY_PROMPT + sanitizePromptInput(JSON.stringify(request.analysis, null, 2)) },
-      ]);
-      tree = JSON.parse(extractJSON(raw)) as AttackTree;
+      try {
+        const raw = await callOpenAI(apiKey, [
+          { role: "user", content: STRATEGY_PROMPT + sanitizePromptInput(JSON.stringify(request.analysis, null, 2)) },
+        ]);
+        tree = JSON.parse(extractJSON(raw)) as AttackTree;
+      } catch (error) {
+        if (!isOpenAIFallbackError(error)) {
+          throw error;
+        }
+        tree = heuristicStrategy(request.analysis, request.structuredFacts);
+      }
     }
   }
 
@@ -307,21 +343,33 @@ export async function runDraft(request: DraftRequest): Promise<DraftDocument> {
   }
 
   const ctx = `Node: ${request.nodeLabel}\nDescription: ${request.nodeDescription}\nDocument type: ${request.documentType}\nCase analysis: ${sanitizePromptInput(JSON.stringify(request.analysis))}`;
-  const content = await callOpenAI(
-    apiKey,
-    [{ role: "user", content: DRAFT_PROMPT + ctx }],
-    2500
-  );
+  try {
+    const content = await callOpenAI(
+      apiKey,
+      [{ role: "user", content: DRAFT_PROMPT + ctx }],
+      2500
+    );
 
-  const draft = {
-    type: request.documentType || "appeal_letter",
-    title: request.nodeLabel,
-    content,
-    keyPoints: request.analysis.appealGrounds.slice(0, 3).map((ground) => ground.argument),
-    explanation: buildExplanation({ analysis: request.analysis }),
-  };
-  ensureDraftMeaningful(draft);
-  return draft;
+    const draft = {
+      type: request.documentType || "appeal_letter",
+      title: request.nodeLabel,
+      content,
+      keyPoints: request.analysis.appealGrounds.slice(0, 3).map((ground) => ground.argument),
+      explanation: buildExplanation({ analysis: request.analysis }),
+    };
+    ensureDraftMeaningful(draft);
+    return draft;
+  } catch (error) {
+    if (!isOpenAIFallbackError(error)) {
+      throw error;
+    }
+    const draft = {
+      ...heuristicDraft(request),
+      explanation: buildExplanation({ analysis: request.analysis }),
+    };
+    ensureDraftMeaningful(draft);
+    return draft;
+  }
 }
 
 function summarizeEvidenceDocuments(evidenceDocuments: UploadedEvidenceInput[]): string[] {

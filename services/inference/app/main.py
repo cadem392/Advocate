@@ -67,6 +67,8 @@ class EvidenceRelevanceRequest(BaseModel):
     patient_context: Optional[str] = None
     insurer: Optional[str] = None
     appeal_grounds: list[str] = Field(default_factory=list)
+    issue_class: Optional[str] = None
+    branch_type: Optional[str] = None
     target_node_label: Optional[str] = None
     target_node_type: Optional[str] = None
 
@@ -207,65 +209,208 @@ def _jaccard(left: str, right: str) -> float:
     return len(left_tokens & right_tokens) / len(union) if union else 0.0
 
 
+MEDICAL_APPEAL_TERMS = [
+    "denial",
+    "claim",
+    "appeal",
+    "coverage",
+    "medical necessity",
+    "medically necessary",
+    "provider",
+    "physician",
+    "clinical",
+    "therapy",
+    "treatment",
+    "diagnosis",
+    "cpt",
+    "icd",
+    "date of service",
+    "policy",
+    "eob",
+    "explanation of benefits",
+    "prior authorization",
+    "authorization",
+    "member id",
+    "claim number",
+    "billed amount",
+    "determination",
+]
+
+CLINICAL_SUPPORT_TERMS = [
+    "provider note",
+    "physician",
+    "clinical",
+    "progress note",
+    "therapy",
+    "physical therapy",
+    "conservative treatment",
+    "symptom",
+    "diagnosis",
+    "imaging",
+    "mri",
+    "medical necessity",
+]
+
+COVERAGE_TERMS = [
+    "coverage",
+    "policy",
+    "evidence of coverage",
+    "medical policy",
+    "benefit",
+    "member handbook",
+    "plan section",
+    "clinical policy bulletin",
+    "prior authorization",
+    "authorization",
+    "appeal rights",
+]
+
+DENIAL_TERMS = [
+    "claim denied",
+    "adverse benefit determination",
+    "denial code",
+    "reason for denial",
+    "determination",
+    "claim determination notice",
+    "appeal rights",
+]
+
+IRRELEVANT_FILE_TERMS = [
+    "doctype html",
+    "<html",
+    "<body",
+    "div class",
+    "linked-user-flow",
+    "case-dashboard",
+    "workspace",
+    "send-confirmation",
+    "status-tracker",
+    "navigation",
+    "tailwind",
+    "next.js",
+    "localhost",
+    "advocate-",
+]
+
+
+def _count_phrase_hits(text: str, terms: list[str]) -> int:
+    return sum(1 for term in terms if term in text)
+
+
+def _alpha_ratio(text: str) -> float:
+    compact = __import__("re").sub(r"\s+", "", text)
+    if not compact:
+        return 0.0
+    alpha_chars = len(__import__("re").sub(r"[^a-z]", "", compact, flags=__import__("re").IGNORECASE))
+    return alpha_chars / len(compact)
+
+
+def _classify_document_family(text: str) -> str:
+    if _count_phrase_hits(text, IRRELEVANT_FILE_TERMS) > 0:
+        return "irrelevant"
+    clinical_hits = _count_phrase_hits(text, CLINICAL_SUPPORT_TERMS)
+    coverage_hits = _count_phrase_hits(text, COVERAGE_TERMS)
+    denial_hits = _count_phrase_hits(text, DENIAL_TERMS)
+    if clinical_hits >= coverage_hits and clinical_hits >= denial_hits and clinical_hits > 0:
+        return "clinical"
+    if coverage_hits >= denial_hits and coverage_hits > 0:
+        return "coverage"
+    if denial_hits > 0:
+        return "denial"
+    return "general"
+
+
 def _heuristic_evidence_relevance(payload: EvidenceRelevanceRequest) -> EvidenceRelevanceResponse:
     lower = f"{payload.label} {payload.snippet}".lower()
+    denial_reason = (payload.denial_reason or "").lower()
+    branch_type = (payload.branch_type or payload.target_node_label or payload.target_node_type or "").lower()
+    issue_class = (payload.issue_class or "").lower()
     context = " ".join(
         [
             payload.analysis_summary or "",
-            payload.denial_reason or "",
+            denial_reason,
             payload.patient_context or "",
             payload.insurer or "",
             " ".join(payload.appeal_grounds),
+            issue_class,
+            branch_type,
             payload.target_node_label or "",
             payload.target_node_type or "",
         ]
     )
     similarity = _jaccard(lower, context.lower())
+    family = _classify_document_family(lower)
+    medical_hits = _count_phrase_hits(lower, MEDICAL_APPEAL_TERMS)
+    alpha_quality = _alpha_ratio(lower)
+    looks_irrelevant = family == "irrelevant" or (medical_hits == 0 and similarity < 0.08) or alpha_quality < 0.55
 
-    evidence_score = 0.35
+    evidence_score = 0.12
     if payload.source_type == "provider_note":
+        evidence_score += 0.30
+    elif payload.source_type == "policy_excerpt":
+        evidence_score += 0.26
+    elif payload.source_type == "regulation":
         evidence_score += 0.22
-    if payload.source_type == "regulation":
-        evidence_score += 0.18
-    if payload.source_type == "policy_excerpt":
+    elif payload.source_type == "derived_signal":
         evidence_score += 0.16
-    if payload.source_type == "derived_signal":
-        evidence_score += 0.14
-    if payload.source_type == "uploaded_file":
-        evidence_score += 0.08
+    elif payload.source_type == "uploaded_file":
+        evidence_score -= 0.02
     if payload.missing:
         evidence_score -= 0.30
 
-    denial_reason = (payload.denial_reason or "").lower()
-    node_label = (payload.target_node_label or "").lower()
+    if family == "clinical":
+        evidence_score += 0.20
+    elif family == "coverage":
+        evidence_score += 0.18
+    elif family == "denial":
+        evidence_score += 0.16
+
+    evidence_score += min(0.22, medical_hits * 0.025)
 
     if "medical necessity" in lower and "medical necessity" in denial_reason:
-        evidence_score += 0.18
+        evidence_score += 0.24
     if "prior authorization" in lower and "authorization" in denial_reason:
-        evidence_score += 0.16
+        evidence_score += 0.22
+    if ("coverage" in lower or "policy" in lower) and "coverage" in denial_reason:
+        evidence_score += 0.20
     if "emergency" in lower and "authorization" in denial_reason:
         evidence_score += 0.14
-    if any(char.isdigit() for char in lower) and "billing" in node_label:
-        evidence_score += 0.15
-    if "appeal" in node_label and ("physician" in lower or "clinical" in lower):
+    if any(char.isdigit() for char in lower) and ("billing" in branch_type or "claim" in lower):
+        evidence_score += 0.12
+    if ("provider" in branch_type or "clinical" in branch_type) and family == "clinical":
+        evidence_score += 0.18
+    if ("coverage" in branch_type or "policy" in branch_type) and family == "coverage":
+        evidence_score += 0.18
+    if "appeal" in branch_type and ("physician" in lower or "clinical" in lower):
         evidence_score += 0.12
 
-    blended = _clamp(evidence_score * 0.6 + similarity * 0.4)
-    reasoning = [f"source={payload.source_type}", f"similarity={similarity:.2f}"]
+    if looks_irrelevant:
+        evidence_score = min(evidence_score, 0.06)
+    elif medical_hits == 0:
+        evidence_score = min(evidence_score, 0.18)
+
+    blended = _clamp(min(0.06, similarity * 0.3) if looks_irrelevant else evidence_score * 0.72 + similarity * 0.28)
+    reasoning = [f"source={payload.source_type}", f"similarity={similarity:.2f}", f"medical_hits={medical_hits}"]
+    if family != "general":
+        reasoning.append(f"family={family}")
+    if looks_irrelevant:
+        reasoning.append("irrelevant-document penalty")
     if "medical necessity" in lower:
         reasoning.append("medical-necessity match")
     if "authorization" in lower:
         reasoning.append("authorization match")
+    if "coverage" in lower or "policy" in lower:
+        reasoning.append("coverage match")
     if any(char.isdigit() for char in lower):
         reasoning.append("code/token match")
 
     return EvidenceRelevanceResponse(
         relevance_score=round(blended, 2),
-        confidence=round(_clamp(0.58 + similarity * 0.25), 2),
+        confidence=round(_clamp(0.78 if looks_irrelevant else 0.46 + similarity * 0.24 + min(0.2, medical_hits * 0.01)), 2),
         source="heuristic",
         reasoning=", ".join(reasoning),
         evidence_score=round(_clamp(evidence_score), 2),
-        case_similarity=round(similarity, 2),
+        case_similarity=round(_clamp(similarity), 2),
     )
 
 

@@ -5,6 +5,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { ValidationError } from "@/lib/server/request-validation";
+import { persistUploadedFile } from "@/lib/server/upload-store";
 
 const execFileAsync = promisify(execFile);
 
@@ -285,6 +286,12 @@ export async function ingestFile(file: File): Promise<EvidenceIngestionResult> {
   const excerpt = extractedText
     ? excerptText(extractedText)
     : `Uploaded file ${fileName}. No extracted text available yet.`;
+  const storedUpload = await persistUploadedFile({
+    fileName,
+    mimeType,
+    sizeBytes,
+    buffer,
+  });
 
   return {
     fileName,
@@ -295,5 +302,7 @@ export async function ingestFile(file: File): Promise<EvidenceIngestionResult> {
     extractedText,
     excerpt,
     warnings,
+    storedFileId: storedUpload.storedFileId,
+    previewUrl: storedUpload.previewUrl,
   };
 }

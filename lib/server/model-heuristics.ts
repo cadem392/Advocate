@@ -40,6 +40,112 @@ function jaccardSimilarity(left: string, right: string): number {
   return union ? intersection / union : 0;
 }
 
+const MEDICAL_APPEAL_TERMS = [
+  "denial",
+  "claim",
+  "appeal",
+  "coverage",
+  "medical necessity",
+  "medically necessary",
+  "provider",
+  "physician",
+  "clinical",
+  "therapy",
+  "treatment",
+  "diagnosis",
+  "cpt",
+  "icd",
+  "date of service",
+  "policy",
+  "eob",
+  "explanation of benefits",
+  "prior authorization",
+  "authorization",
+  "member id",
+  "claim number",
+  "billed amount",
+  "determination",
+];
+
+const CLINICAL_SUPPORT_TERMS = [
+  "provider note",
+  "physician",
+  "clinical",
+  "progress note",
+  "therapy",
+  "physical therapy",
+  "conservative treatment",
+  "symptom",
+  "diagnosis",
+  "imaging",
+  "mri",
+  "medical necessity",
+];
+
+const COVERAGE_TERMS = [
+  "coverage",
+  "policy",
+  "evidence of coverage",
+  "medical policy",
+  "benefit",
+  "member handbook",
+  "plan section",
+  "clinical policy bulletin",
+  "prior authorization",
+  "authorization",
+  "appeal rights",
+];
+
+const DENIAL_TERMS = [
+  "claim denied",
+  "adverse benefit determination",
+  "denial code",
+  "reason for denial",
+  "determination",
+  "claim determination notice",
+  "appeal rights",
+];
+
+const IRRELEVANT_FILE_TERMS = [
+  "doctype html",
+  "<html",
+  "<body",
+  "div class",
+  "linked-user-flow",
+  "case-dashboard",
+  "workspace",
+  "send-confirmation",
+  "status-tracker",
+  "navigation",
+  "tailwind",
+  "next.js",
+  "localhost",
+  "advocate-",
+];
+
+function countPhraseHits(text: string, terms: string[]): number {
+  return terms.reduce((total, term) => (text.includes(term) ? total + 1 : total), 0);
+}
+
+function alphaRatio(text: string): number {
+  const compact = text.replace(/\s+/g, "");
+  if (!compact) return 0;
+  const alphaChars = compact.replace(/[^a-z]/gi, "").length;
+  return alphaChars / compact.length;
+}
+
+function classifyDocumentFamily(text: string): "clinical" | "coverage" | "denial" | "irrelevant" | "general" {
+  if (countPhraseHits(text, IRRELEVANT_FILE_TERMS) > 0) return "irrelevant";
+  const clinicalHits = countPhraseHits(text, CLINICAL_SUPPORT_TERMS);
+  const coverageHits = countPhraseHits(text, COVERAGE_TERMS);
+  const denialHits = countPhraseHits(text, DENIAL_TERMS);
+
+  if (clinicalHits >= coverageHits && clinicalHits >= denialHits && clinicalHits > 0) return "clinical";
+  if (coverageHits >= denialHits && coverageHits > 0) return "coverage";
+  if (denialHits > 0) return "denial";
+  return "general";
+}
+
 export function heuristicAppealRisk(input: AppealRiskRequest): AppealRiskScore {
   const denialReason = (input.denialReason || "").toLowerCase();
   const claimType = (input.claimType || "").toLowerCase();
@@ -153,57 +259,100 @@ export function heuristicEvidenceRelevance(
   const snippet = input.snippet || "";
   const label = input.label || "";
   const appealGrounds = (input.appealGrounds || []).join(" ");
+  const issueClass = (input.issueClass || "").toLowerCase();
+  const branchType = (input.branchType || "").toLowerCase();
   const caseContext = [
     input.analysisSummary || "",
     input.denialReason || "",
     input.patientContext || "",
     input.insurer || "",
     appealGrounds,
+    issueClass,
+    branchType,
     input.targetNodeLabel || "",
     input.targetNodeType || "",
   ].join(" ");
 
-  const similarity = jaccardSimilarity(`${label} ${snippet}`, caseContext);
-  let evidenceScore = 0.35;
-  const lower = `${label} ${snippet}`.toLowerCase();
+  const rawText = `${label} ${snippet}`;
+  const similarity = jaccardSimilarity(rawText, caseContext);
+  let evidenceScore = 0.12;
+  const lower = rawText.toLowerCase();
   const denialReason = (input.denialReason || "").toLowerCase();
   const nodeLabel = (input.targetNodeLabel || "").toLowerCase();
+  const family = classifyDocumentFamily(lower);
+  const medicalHits = countPhraseHits(lower, MEDICAL_APPEAL_TERMS);
+  const alphaQuality = alphaRatio(lower);
+  const looksIrrelevant =
+    family === "irrelevant" ||
+    (medicalHits === 0 && similarity < 0.08) ||
+    alphaQuality < 0.55;
 
-  if (input.sourceType === "provider_note") evidenceScore += 0.22;
-  if (input.sourceType === "regulation") evidenceScore += 0.18;
-  if (input.sourceType === "policy_excerpt") evidenceScore += 0.16;
-  if (input.sourceType === "derived_signal") evidenceScore += 0.14;
-  if (input.sourceType === "uploaded_file") evidenceScore += 0.08;
+  if (input.sourceType === "provider_note") evidenceScore += 0.3;
+  if (input.sourceType === "policy_excerpt") evidenceScore += 0.26;
+  if (input.sourceType === "regulation") evidenceScore += 0.22;
+  if (input.sourceType === "derived_signal") evidenceScore += 0.16;
+  if (input.sourceType === "uploaded_file") evidenceScore -= 0.02;
   if (input.missing) evidenceScore -= 0.3;
 
+  if (family === "clinical") evidenceScore += 0.2;
+  if (family === "coverage") evidenceScore += 0.18;
+  if (family === "denial") evidenceScore += 0.16;
+
+  evidenceScore += Math.min(0.22, medicalHits * 0.025);
+
   if (lower.includes("medical necessity") && denialReason.includes("medical necessity")) {
-    evidenceScore += 0.18;
+    evidenceScore += 0.24;
   }
   if (lower.includes("prior authorization") && denialReason.includes("authorization")) {
-    evidenceScore += 0.16;
+    evidenceScore += 0.22;
+  }
+  if ((lower.includes("coverage") || lower.includes("policy")) && denialReason.includes("coverage")) {
+    evidenceScore += 0.2;
   }
   if (lower.includes("emergency") && denialReason.includes("authorization")) {
     evidenceScore += 0.14;
   }
-  if ((lower.includes("cpt") || /\b\d{5}\b/.test(lower)) && nodeLabel.includes("billing")) {
-    evidenceScore += 0.15;
+  if ((lower.includes("cpt") || /\b\d{5}\b/.test(lower)) && (nodeLabel.includes("billing") || lower.includes("claim"))) {
+    evidenceScore += 0.12;
+  }
+  if ((nodeLabel.includes("provider") || branchType.includes("provider")) && family === "clinical") {
+    evidenceScore += 0.18;
+  }
+  if ((nodeLabel.includes("coverage") || branchType.includes("coverage")) && family === "coverage") {
+    evidenceScore += 0.18;
   }
   if (nodeLabel.includes("appeal") && (lower.includes("physician") || lower.includes("clinical"))) {
     evidenceScore += 0.12;
   }
 
-  const blended = clamp(evidenceScore * 0.6 + similarity * 0.4);
+  if (looksIrrelevant) {
+    evidenceScore = Math.min(evidenceScore, 0.06);
+  } else if (medicalHits === 0) {
+    evidenceScore = Math.min(evidenceScore, 0.18);
+  }
+
+  const blended = looksIrrelevant
+    ? clamp(Math.min(0.06, similarity * 0.3))
+    : clamp(evidenceScore * 0.72 + similarity * 0.28);
   const reasoningParts = [
     `source=${input.sourceType}`,
     `similarity=${similarity.toFixed(2)}`,
+    `medical_hits=${medicalHits}`,
   ];
+  if (family !== "general") reasoningParts.push(`family=${family}`);
+  if (looksIrrelevant) reasoningParts.push("irrelevant-document penalty");
   if (lower.includes("medical necessity")) reasoningParts.push("medical-necessity match");
   if (lower.includes("authorization")) reasoningParts.push("authorization match");
+  if (lower.includes("coverage") || lower.includes("policy")) reasoningParts.push("coverage match");
   if (/\b\d{5}\b/.test(lower)) reasoningParts.push("procedure code match");
 
   return {
     relevanceScore: Number(blended.toFixed(2)),
-    confidence: Number(clamp(0.58 + similarity * 0.25).toFixed(2)),
+    confidence: Number(
+      clamp(
+        looksIrrelevant ? 0.78 : 0.46 + similarity * 0.24 + Math.min(0.2, medicalHits * 0.01)
+      ).toFixed(2)
+    ),
     source: "heuristic",
     reasoning: reasoningParts.join(", "),
     evidenceScore: Number(clamp(evidenceScore).toFixed(2)),

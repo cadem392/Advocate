@@ -77,6 +77,75 @@ async function main() {
   const badEvidenceScore = await postJSON("/api/models/evidence-relevance", {});
   assert(badEvidenceScore.response.status === 400, "Missing evidence relevance payload should return 400");
 
+  const relevantEvidence = await postJSON("/api/models/evidence-relevance", {
+    label: "medical_necessity.pdf",
+    snippet:
+      "Treating physician progress note: patient completed physical therapy and anti-inflammatory treatment without improvement. Persistent pain, reduced range of motion, and clinical concern for structural injury support medical necessity for MRI.",
+    sourceType: "provider_note",
+    analysisSummary: "Claim denied for medical necessity after failed conservative treatment.",
+    denialReason: "Medical necessity not established",
+    patientContext: "Lumbar MRI request after persistent symptoms.",
+    insurer: "BlueCross HealthPlan",
+    appealGrounds: [
+      "medical_necessity provider rationale needed",
+      "coverage_terms policy bulletin conflict",
+    ],
+    issueClass: "medical_necessity coverage_terms",
+    branchType: "Provider Support Needed",
+    targetNodeLabel: "Provider Support Needed",
+    targetNodeType: "evidence",
+  });
+  assert(relevantEvidence.response.ok, "Relevant evidence request failed");
+
+  const irrelevantEvidence = await postJSON("/api/models/evidence-relevance", {
+    label: "dashboard-export.html",
+    snippet:
+      "<!DOCTYPE html><html><body><div class=\"layout\">linked-user-flow workspace support confirmation status-tracker</div></body></html>",
+    sourceType: "uploaded_file",
+    analysisSummary: "Claim denied for medical necessity after failed conservative treatment.",
+    denialReason: "Medical necessity not established",
+    patientContext: "Lumbar MRI request after persistent symptoms.",
+    insurer: "BlueCross HealthPlan",
+    appealGrounds: [
+      "medical_necessity provider rationale needed",
+      "coverage_terms policy bulletin conflict",
+    ],
+    issueClass: "medical_necessity coverage_terms",
+    branchType: "Provider Support Needed",
+    targetNodeLabel: "Provider Support Needed",
+    targetNodeType: "evidence",
+  });
+  assert(irrelevantEvidence.response.ok, "Irrelevant evidence request failed");
+  assert(
+    relevantEvidence.body.relevanceScore > irrelevantEvidence.body.relevanceScore,
+    "Relevant medical evidence should outrank irrelevant exports"
+  );
+
+  const formData = new FormData();
+  formData.append(
+    "file",
+    new Blob(
+      [
+        "Treating provider note. Medical necessity documented after conservative treatment failed. Claim number CLM-TEST-1001.",
+      ],
+      { type: "text/plain" }
+    ),
+    "provider-note.txt"
+  );
+  const ingestion = await request("/api/evidence/ingest", {
+    method: "POST",
+    body: formData,
+  });
+  assert(ingestion.response.ok, "Evidence ingest request failed");
+  assert(ingestion.body.previewUrl, "Evidence ingest should return a preview URL");
+
+  const preview = await request(ingestion.body.previewUrl);
+  assert(preview.response.ok, "Stored preview request failed");
+  assert(
+    String(preview.body).includes("Medical necessity documented"),
+    "Stored preview should return uploaded document content"
+  );
+
   console.log("Smoke test passed");
 }
 

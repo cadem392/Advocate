@@ -118,7 +118,12 @@ export function AdvocateNav({
             onClick={(event) => handleSameRouteNavigation(event, homeHref)}
             className="relative z-[1] flex shrink-0 items-center pointer-events-auto"
           >
-            <BrandLockup width={460} height={110} priority imageClassName="h-[72px] w-auto -mb-1" />
+            <BrandLockup
+              width={490}
+              height={118}
+              priority
+              imageClassName="h-[78px] w-auto -mt-1 -mb-2"
+            />
           </Link>
         </div>
 

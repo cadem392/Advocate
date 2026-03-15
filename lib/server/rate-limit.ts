@@ -9,8 +9,22 @@ function getClientIp(request: NextRequest) {
   return forwarded?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
 }
 
+function shouldBypassRateLimit(ip: string) {
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.DISABLE_RATE_LIMIT === "true" ||
+    ip === "unknown" ||
+    ip === "127.0.0.1" ||
+    ip === "::1"
+  );
+}
+
 export function applyRateLimit(request: NextRequest): NextResponse | null {
   const ip = getClientIp(request);
+  if (shouldBypassRateLimit(ip)) {
+    // Demo/dev reliability matters more than local throttling; keep hard caps for deployed environments only.
+    return null;
+  }
   const now = Date.now();
   const activeWindow = (requestLog.get(ip) || []).filter((timestamp) => now - timestamp < WINDOW_MS);
 

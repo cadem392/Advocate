@@ -14,7 +14,7 @@ interface BertMessage {
 interface BertResponse {
   reply: string;
   suggestions?: string[];
-  mode: "fallback" | "llm";
+  mode: "fallback" | "llm" | "grounded" | "ollama";
 }
 
 interface BertPromptEventDetail {

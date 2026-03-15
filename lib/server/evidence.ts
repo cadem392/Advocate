@@ -78,6 +78,8 @@ function buildEvidenceRequest(
     patientContext: analysis.patientContext,
     insurer: structuredFacts?.insurer,
     appealGrounds: analysis.appealGrounds.map((ground) => `${ground.basis} ${ground.argument}`),
+    issueClass: analysis.appealGrounds.map((ground) => ground.basis).join(" "),
+    branchType: recommendedNode?.label || recommendedNode?.type,
     targetNodeLabel: recommendedNode?.label,
     targetNodeType: recommendedNode?.type,
   };

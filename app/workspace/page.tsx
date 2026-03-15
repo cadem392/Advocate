@@ -468,7 +468,7 @@ export default function WorkspacePage() {
                 </p>
               </div>
 
-              <div className="relative overflow-x-auto rounded-sm border border-[#E8E4DF] bg-white/50 p-6">
+              <div className="relative overflow-x-auto p-6">
                 <AttackTreeCanvas
                   tree={strategy}
                   selectedNodeId={selectedNode?.id}

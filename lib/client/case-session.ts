@@ -25,6 +25,9 @@ export interface VaultDocument {
   category: string;
   snippet: string;
   extractedText?: string;
+  mimeType?: string;
+  storedFileId?: string;
+  previewUrl?: string;
   ingestionStatus?: "parsed_text" | "parsed_pdf" | "metadata_only";
   ingestionWarnings?: string[];
   sourceType: EvidenceItem["sourceType"] | "uploaded_file";

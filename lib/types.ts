@@ -75,6 +75,8 @@ export interface EvidenceRelevanceRequest {
   patientContext?: string;
   insurer?: string;
   appealGrounds?: string[];
+  issueClass?: string;
+  branchType?: string;
   targetNodeLabel?: string;
   targetNodeType?: string;
 }
@@ -98,6 +100,8 @@ export interface EvidenceIngestionResult {
   extractedText: string;
   excerpt: string;
   warnings: string[];
+  storedFileId?: string;
+  previewUrl?: string;
 }
 
 export interface VaultDocumentSnapshot {
@@ -107,6 +111,9 @@ export interface VaultDocumentSnapshot {
   category: string;
   snippet: string;
   extractedText?: string;
+  mimeType?: string;
+  storedFileId?: string;
+  previewUrl?: string;
   ingestionStatus?: "parsed_text" | "parsed_pdf" | "metadata_only";
   ingestionWarnings?: string[];
   sourceType: EvidenceItem["sourceType"] | "uploaded_file";

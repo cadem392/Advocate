@@ -75,7 +75,10 @@ async function scoreUploadedDocument(
 ): Promise<EvidenceRelevanceScore> {
   const payload: EvidenceRelevanceRequest = {
     label: file.name,
-    snippet: ingested.excerpt || `User-uploaded document: ${file.name}`,
+    snippet:
+      ingested.excerpt ||
+      ingested.extractedText.slice(0, 1200) ||
+      `Uploaded file ${file.name}. No extracted text available.`,
     sourceType: "uploaded_file",
     analysisSummary: current.analysis.summary,
     denialReason: current.structuredFacts.denialReason,
@@ -84,6 +87,10 @@ async function scoreUploadedDocument(
     appealGrounds: current.analysis.appealGrounds.map(
       (ground) => `${ground.basis} ${ground.argument}`
     ),
+    issueClass: current.analysis.appealGrounds.map((ground) => ground.basis).join(" "),
+    branchType:
+      current.strategy.nodes.find((node) => node.id === current.selectedNodeId)?.label ||
+      current.strategy.explanation?.recommendedNodeId,
     targetNodeLabel:
       current.strategy.nodes.find((node) => node.id === current.selectedNodeId)?.label ||
       current.strategy.explanation?.recommendedNodeId,
@@ -105,6 +112,26 @@ async function scoreUploadedDocument(
 function filterDocuments(documents: VaultDocument[], activeFilter: string) {
   if (activeFilter === "All Documents") return documents;
   return documents.filter((doc) => doc.category === activeFilter);
+}
+
+function buildDocumentPreview(doc?: VaultDocument) {
+  if (!doc) return "No extracted text available.";
+  const source = doc.extractedText || doc.snippet || "No extracted text available.";
+  return source.replace(/\s+/g, " ").trim().slice(0, 340);
+}
+
+function fileExtension(name: string) {
+  const parts = name.split(".");
+  return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : "FILE";
+}
+
+function canRenderInlinePreview(doc?: VaultDocument) {
+  if (!doc?.previewUrl || !doc.mimeType) return false;
+  return (
+    doc.mimeType === "application/pdf" ||
+    doc.mimeType.startsWith("image/") ||
+    doc.mimeType.startsWith("text/")
+  );
 }
 
 export default function EvidencePage() {
@@ -171,7 +198,7 @@ export default function EvidencePage() {
     if (!files?.length) return;
 
     const current = loadCaseSession() || createFallbackCaseSession();
-    const uploadedDocuments: VaultDocument[] = await Promise.all(
+        const uploadedDocuments: VaultDocument[] = await Promise.all(
       Array.from(files).map(async (file) => {
         const ingested = await ingestUploadedDocument(file).catch(() => ({
           fileName: file.name,
@@ -182,14 +209,16 @@ export default function EvidencePage() {
           extractedText: "",
           excerpt: `Uploaded file ${file.name}. No extracted text available yet.`,
           warnings: ["File ingestion fell back to metadata-only mode."],
+          storedFileId: undefined,
+          previewUrl: undefined,
         }));
 
         const score = await scoreUploadedDocument(current, file, ingested).catch(() => ({
-          relevanceScore: 0.58,
-          confidence: 0.55,
+          relevanceScore: 0.03,
+          confidence: 0.2,
           source: "heuristic" as const,
-          reasoning: "fallback score for uploaded document",
-          warning: undefined,
+          reasoning: "Scoring was unavailable, so this upload was conservatively marked as low relevance.",
+          warning: "Upload scoring fell back because the relevance endpoint did not respond.",
         }));
 
         return {
@@ -199,6 +228,9 @@ export default function EvidencePage() {
           category: ingested.category,
           snippet: ingested.excerpt,
           extractedText: ingested.extractedText,
+          mimeType: ingested.mimeType,
+          storedFileId: ingested.storedFileId,
+          previewUrl: ingested.previewUrl,
           ingestionStatus: ingested.ingestionStatus,
           ingestionWarnings: ingested.warnings,
           sourceType: "uploaded_file",
@@ -490,15 +522,25 @@ export default function EvidencePage() {
                       selected
                         ? "border-2 border-[#C4A747] ring-2 ring-[#C4A747] ring-offset-2"
                         : "border border-[#E8E4DF]"
-                    } bg-white p-3 flex flex-col gap-3 hover:border-[#1E3A5F] group cursor-pointer`}
+                    } min-w-0 bg-white p-3 flex flex-col gap-3 hover:border-[#1E3A5F] group cursor-pointer`}
                   >
                     <div
                       className={`aspect-[3/4] ${
                         selected ? "bg-[#F9F8F6]" : "bg-[#F3F3F3]"
-                      } flex items-center justify-center overflow-hidden border border-gray-100 relative`}
+                      } overflow-hidden border border-gray-100 relative p-3`}
                     >
-                      <div className={`text-4xl ${selected ? "text-[#C4A747]" : "text-gray-300"}`}>
-                        📄
+                      <div className="flex h-full w-full flex-col rounded-sm border border-[#E8E4DF] bg-white p-2 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-[8px] font-bold uppercase tracking-widest text-[#6B6B6B]">
+                            {fileExtension(doc.name)}
+                          </span>
+                          <span className="text-[8px] font-bold uppercase tracking-widest text-[#C4A747]">
+                            Preview
+                          </span>
+                        </div>
+                        <p className="line-clamp-6 whitespace-pre-wrap break-words text-[8px] leading-relaxed text-[#4A4A4A]">
+                          {buildDocumentPreview(doc)}
+                        </p>
                       </div>
                       {doc.verified || selected ? (
                         <div className="absolute top-2 right-2 flex gap-1">
@@ -510,15 +552,15 @@ export default function EvidencePage() {
                         </div>
                       ) : null}
                     </div>
-                    <div className="flex flex-col gap-1">
+                    <div className="min-w-0 flex flex-col gap-1">
                       <p
-                        className={`text-[11px] font-bold truncate ${
+                        className={`line-clamp-2 min-h-[2.8rem] break-all text-[11px] font-bold ${
                           selected ? "underline underline-offset-2" : ""
                         }`}
                       >
                         {doc.name}
                       </p>
-                      <p className="text-[9px] text-[#6B6B6B] uppercase">{doc.meta}</p>
+                      <p className="break-words text-[9px] text-[#6B6B6B] uppercase">{doc.meta}</p>
                     </div>
                     <div className="flex flex-wrap gap-1">
                       <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase bg-[#EEF4EC] text-[#1B5E3F]">
@@ -557,7 +599,7 @@ export default function EvidencePage() {
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#C4A747]">
               Document Insight
             </span>
-            <h3 className="font-serif text-lg truncate">
+            <h3 className="min-w-0 font-serif text-lg break-all">
               {selectedDocument?.name || "No document selected"}
             </h3>
           </div>
@@ -594,6 +636,45 @@ export default function EvidencePage() {
             </section>
 
             <section className="bg-white border border-[#E8E4DF] p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#6B6B6B]">
+                  Inline Preview
+                </span>
+                {selectedDocument?.mimeType ? (
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#1E3A5F]">
+                    {selectedDocument.mimeType}
+                  </span>
+                ) : null}
+              </div>
+
+              {selectedDocument && canRenderInlinePreview(selectedDocument) ? (
+                selectedDocument.mimeType === "application/pdf" ? (
+                  <iframe
+                    title={`${selectedDocument.name} preview`}
+                    src={selectedDocument.previewUrl}
+                    className="h-[360px] w-full border border-[#E8E4DF] bg-[#F9F8F6]"
+                  />
+                ) : selectedDocument.mimeType?.startsWith("image/") ? (
+                  <img
+                    src={selectedDocument.previewUrl}
+                    alt={selectedDocument.name}
+                    className="max-h-[360px] w-full border border-[#E8E4DF] bg-[#F9F8F6] object-contain"
+                  />
+                ) : (
+                  <iframe
+                    title={`${selectedDocument.name} preview`}
+                    src={selectedDocument.previewUrl}
+                    className="h-[360px] w-full border border-[#E8E4DF] bg-[#F9F8F6]"
+                  />
+                )
+              ) : (
+                <div className="border border-dashed border-[#E8E4DF] bg-[#F9F8F6] px-4 py-6 text-[11px] leading-relaxed text-[#6B6B6B]">
+                  No inline preview is available for this file yet. Use the extracted text below to inspect the document contents.
+                </div>
+              )}
+            </section>
+
+            <section className="bg-white border border-[#E8E4DF] p-5">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-[#6B6B6B]">
                   Ingestion Status
@@ -602,11 +683,13 @@ export default function EvidencePage() {
                   {selectedDocument?.ingestionStatus?.replace("_", " ") || "session"}
                 </span>
               </div>
-              <p className="text-[11px] text-[#6B6B6B] leading-relaxed">
-                {selectedDocument?.extractedText
-                  ? selectedDocument.extractedText.slice(0, 260)
-                  : "No extracted text is available for this file yet."}
-              </p>
+              <div className="max-h-[260px] overflow-y-auto border border-[#E8E4DF] bg-[#F9F8F6] p-3">
+                <p className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-[#4A4A4A]">
+                  {selectedDocument?.extractedText
+                    ? selectedDocument.extractedText.slice(0, 2200)
+                    : selectedDocument?.snippet || "No extracted text is available for this file yet."}
+                </p>
+              </div>
               {selectedDocument?.ingestionWarnings?.length ? (
                 <div className="mt-3 flex flex-col gap-1">
                   {selectedDocument.ingestionWarnings.map((warning) => (
@@ -645,7 +728,7 @@ export default function EvidencePage() {
               </h4>
               <div className="space-y-3">
                 <div className="p-3 bg-white border border-[#E8E4DF] rounded-sm">
-                  <p className="text-[10px] text-[#1E3A5F] leading-relaxed italic">
+                  <p className="break-words text-[10px] text-[#1E3A5F] leading-relaxed italic">
                     {selectedDocument
                       ? `"${selectedDocument.snippet}"`
                       : "No annotation available."}

@@ -32,6 +32,22 @@ export function sanitizePromptInput(raw: string): string {
   return sanitized.replace(/\n{3,}/g, "\n\n").trim();
 }
 
+export function isOpenAIFallbackError(error: unknown): boolean {
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
+
+  return [
+    "quota",
+    "billing",
+    "insufficient_quota",
+    "rate limit",
+    "429",
+    "401",
+    "invalid api key",
+    "account is not active",
+  ].some((pattern) => message.includes(pattern));
+}
+
 export async function callOpenAI(
   apiKey: string,
   messages: { role: string; content: string }[],
